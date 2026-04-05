@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/qa.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="qa-section">
+    <h1>{{ t.qa_title }}</h1>
+    
+    <div class="qa-container">
+        <label for="concernInput" class="visually-hidden">{{ t.qa_placeholder }}</label>
+        <textarea 
+            id="concernInput" 
+            placeholder="{{ t.qa_placeholder }}" 
+            rows="4"
+            aria-required="true"
+        ></textarea>
+        <button id="qaBtn" aria-label="{{ t.qa_btn }}">{{ t.qa_btn }}</button>
+    </div>
+
+    <div id="qaLoading" class="qa-loading hidden">
+        <div class="spinner"></div>
+        <p id="loadingStatus">{{ t.qa_loading }}</p>
+    </div>
+
+    <div id="qaResult" class="qa-result hidden" aria-live="polite">
+        <h2>{{ t.qa_result_title }}</h2>
+        
+        <div class="result-card">
+            <div class="poem-display">
+                <span class="label">{{ t.qa_poem_label }}</span>
+                <blockquote id="resultPoem"></blockquote>
+                <p id="resultSource" class="source-link"></p>
+            </div>
+            
+            <div class="ai-advice">
+                <span class="label">{{ t.qa_ai_advice_label }}</span>
+                <p id="resultAdvice"></p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block script %}
+<script src="{{ url_for('static', filename='js/qa.js') }}"></script>
+{% endblock %}

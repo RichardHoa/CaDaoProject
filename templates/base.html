@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="{{ lang }}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ t.title_document }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700;1,900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/shared.css') }}"
+    />
+
+    <!-- Preload pages and data for instant transitions -->
+    <link rel="prefetch" href="/" as="document" />
+    <link rel="prefetch" href="/search-page" as="document" />
+    <link rel="prefetch" href="/learning-page" as="document" />
+    <link
+      rel="prefetch"
+      href="/api/learning/data"
+      as="fetch"
+      crossorigin="anonymous"
+    />
+
+    <script>
+      const i18n = {{ t | tojson | safe }};
+      function setLanguage(l) {
+        document.cookie = "lang=" + l + "; path=/; max-age=31536000;";
+        window.location.reload();
+      }
+    </script>
+
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <a href="#main-content" class="skip-link">{{ t.skip_link }}</a>
+
+    <nav class="main-nav">
+      <ul>
+        <li><a href="/">{{ t.nav_intro }}</a></li>
+        <li><a href="/search-page">{{ t.nav_search }}</a></li>
+        <li><a href="/learning-page">{{ t.nav_learning }}</a></li>
+        <li><a href="/qa-page">{{ t.nav_qa }}</a></li>
+        <li class="lang-toggle-item">
+          <div class="lang-switch">
+            <button 
+              class="lang-btn {% if lang == 'vi' %}active{% endif %}" 
+              onclick="setLanguage('vi')"
+              aria-label="Tiếng Việt"
+              {% if lang == 'vi' %}disabled{% endif %}
+            >VI</button>
+            <button 
+              class="lang-btn {% if lang == 'en' %}active{% endif %}" 
+              onclick="setLanguage('en')"
+              aria-label="English"
+              {% if lang == 'en' %}disabled{% endif %}
+            >EN</button>
+          </div>
+        </li>
+      </ul>
+    </nav>
+
+    <main id="main-content">{% block content %}{% endblock %}</main>
+
+    <footer class="site-footer">
+      <p>
+        {{ t.footer_creator }}
+        <a
+          href="https://richardhoa.github.io/"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Thái Hoà</a
+        >
+      </p>
+      <p>
+        {{ t.footer_advisor }}
+        <a
+          href="https://fulbright.edu.vn/our-team/le-nguyen-tuong-van/"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Lê Nguyễn Tường Vân</a
+        >
+      </p>
+    </footer>
+
+    {% block script %}{% endblock %}
+  </body>
+</html>

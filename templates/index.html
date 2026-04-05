@@ -1,0 +1,50 @@
+{% extends "base.html" %} {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}" />
+{% endblock %} {% block content %}
+<section class="intro-section">
+  <h1>{{ t.index_title }}</h1>
+
+  <div class="cadao-explanation-container">
+    <div class="cadao-explanation">
+      <h2>{{ t.what_is_cadao_title }}</h2>
+      <p class="explanation-text">{{ t.what_is_cadao_desc }}</p>
+      
+      <div class="cadao-quote-box">
+        <blockquote class="cadao-quote">
+          <p class="quote-body">"{{ t.cadao_quote_text }}"</p>
+          <cite class="quote-cite">{{ t.cadao_quote_source }}</cite>
+        </blockquote>
+      </div>
+    </div>
+  </div>
+
+  <p class="intro-subtitle">
+    {{ t.index_subtitle }}
+  </p>
+  <div class="cards-container">
+    <div class="card search-card">
+      <h2>{{ t.search_card_title }}</h2>
+      <p>
+        {{ t.search_card_desc }}
+      </p>
+      <a href="/search-page" class="card-btn">{{ t.search_card_btn }}</a>
+    </div>
+
+    <div class="card learning-card">
+      <h2>{{ t.learning_card_title }}</h2>
+      <p>
+        {{ t.learning_card_desc }}
+      </p>
+      <a href="/learning-page" class="card-btn">{{ t.learning_card_btn }}</a>
+    </div>
+
+    <div class="card search-card">
+      <h2>{{ t.qa_card_title }}</h2>
+      <p>
+        {{ t.qa_card_desc }}
+      </p>
+      <a href="/qa-page" class="card-btn">{{ t.qa_card_btn }}</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

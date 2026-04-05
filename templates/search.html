@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="search-section">
+    <h1>{{ t.search_title }}</h1>
+    <div class="search-container">
+        <label for="searchInput" class="visually-hidden">{{ t.search_aria }}</label>
+        <input type="text" id="searchInput" placeholder="{{ t.search_placeholder }}">
+        <button id="searchBtn">{{ t.search_btn }}</button>
+    </div>
+
+    <div class="example-questions">
+        <span class="example-title" id="suggested-label">{{ t.suggested_searches }}</span>
+        <div class="example-list" role="group" aria-labelledby="suggested-label">
+            <button type="button" class="example-btn" aria-controls="searchInput">Tình yêu nam nữ</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">Quan niệm về hôn nhân</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">Châm biếm hài hước</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">sự hờn dỗi, ghen tuông</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">Sự cần cù, nhẫn nại</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">Sự hiếu thảo</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">Quan niệm về cái đẹp</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">Phê phán những người lười biếng</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">Sự tích cực trong nghịnh cảnh</button>
+            <button type="button" class="example-btn" aria-controls="searchInput">Mối quan hệ giữa con người và thiên nhiên</button>
+        </div>
+    </div>
+
+    <div class="results" id="results" aria-live="polite">
+        <div class="no-results">{{ t.search_initial }}</div>
+    </div>
+</section>
+{% endblock %}
+
+{% block script %}
+<script src="{{ url_for('static', filename='js/search.js') }}"></script>
+{% endblock %}

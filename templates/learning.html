@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/learning.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="learning-section">
+    <h1>{{ t.learn_title }}</h1>
+    <div class="learning-header">
+        <label for="themeSelect">{{ t.learn_theme_label }}</label>
+        <select id="themeSelect">
+            <!-- Dynamically populated -->
+        </select>
+    </div>
+    <div class="learning-container" id="learningContainer" aria-live="polite">
+        <div class="loading">{{ t.learn_loading_data }}</div>
+    </div>
+</section>
+{% endblock %}
+
+{% block script %}
+<script src="{{ url_for('static', filename='js/learning.js') }}"></script>
+{% endblock %}
