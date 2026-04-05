@@ -1,0 +1,11 @@
+flask
+pandas
+requests
+python-dotenv
+ollama
+faiss-cpu
+scikit-learn
+plotly
+hdbscan
+umap-learn
+waitress

@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+bin/
+lib/
+include/
+
+# Distribution / packaging
+dist/
+build/
+egg-info/
+*.egg-info/
+
+# Data and Pickles (Requested)
+*.csv
+*.pkl
+*.pickle
+*.txt
+
+# Claude & AI Assistant artifacts (Requested)
+.claude/
+claude_config.json
+*.claude.md
+.anthropic/
+
+# Environment variables / Secrets
+.env
+.flaskenv
+
+# IDEs
+.vscode/
+.idea/
