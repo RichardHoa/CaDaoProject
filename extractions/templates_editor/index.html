@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CaDao Editor Suite - Bulk Stacked Editor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --panel-bg: rgba(20, 27, 45, 0.7);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-primary: #8b5cf6; /* Purple */
+            --accent-hover: #7c3aed;
+            --success: #10b981; /* Green */
+            --success-bg: rgba(16, 185, 129, 0.15);
+            --danger: #ef4444; /* Red */
+            --danger-bg: rgba(239, 68, 68, 0.15);
+            --poem-color: #3b82f6; /* Blue */
+            --category-color: #10b981; /* Green */
+            --explanation-color: #f97316; /* Orange */
+            --font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.03) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.03) 0px, transparent 50%);
+        }
+
+        header {
+            padding: 1rem 2rem;
+            background: rgba(11, 15, 25, 0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            height: 70px;
+        }
+
+        .logo h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a78bfa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        select, input, button {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid var(--panel-border);
+            color: var(--text-primary);
+            padding: 0.5rem 0.8rem;
+            border-radius: 8px;
+            font-family: var(--font-family);
+            font-size: 0.9rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+        }
+
+        input[type="number"] {
+            width: 80px;
+            text-align: center;
+        }
+
+        button {
+            background: var(--accent-primary);
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            padding: 0.5rem 1.2rem;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        button.secondary {
+            background: rgba(148, 163, 184, 0.1);
+            color: var(--text-primary);
+            border: 1px solid var(--panel-border);
+        }
+
+        button.secondary:hover {
+            background: rgba(148, 163, 184, 0.2);
+        }
+
+        main {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            overflow-y: auto;
+        }
+
+        .workspace-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 3rem;
+            width: 100%;
+        }
+
+        /* Page Card Row Layout */
+        .page-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .page-card-header {
+            padding: 1rem 1.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .page-card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+        }
+
+        .page-card-body {
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 900px) {
+            .page-card-body {
+                flex-direction: row;
+            }
+        }
+
+        /* Left Column: Image Editor */
+        .page-image-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            min-width: 320px;
+            max-width: 480px;
+        }
+
+        .box-toggle-bar {
+            display: flex;
+            gap: 0.4rem;
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .btn-toggle-box {
+            font-size: 0.75rem;
+            padding: 0.35rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .btn-toggle-box.active-poem { background: var(--poem-color); }
+        .btn-toggle-box.active-category { background: var(--category-color); }
+        .btn-toggle-box.active-explanation { background: var(--explanation-color); }
+
+        .image-viewport {
+            position: relative;
+            width: 100%;
+            background: #1e293b;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--panel-border);
+            user-select: none;
+        }
+
+        .page-image {
+            width: 100%;
+            display: block;
+            pointer-events: none;
+        }
+
+        /* Bounding Box Overlays */
+        .box-overlay {
+            position: absolute;
+            border: 2px dashed;
+            cursor: move;
+            box-sizing: border-box;
+            border-radius: 4px;
+            z-index: 5;
+        }
+
+        .box-overlay.poem-box {
+            border-color: var(--poem-color);
+            background: rgba(59, 130, 246, 0.12);
+        }
+
+        .box-overlay.category-box {
+            border-color: var(--category-color);
+            background: rgba(16, 185, 129, 0.12);
+        }
+
+        .box-overlay.explanation-box {
+            border-color: var(--explanation-color);
+            background: rgba(249, 115, 22, 0.12);
+        }
+
+        .box-label {
+            position: absolute;
+            top: -18px;
+            left: 0;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            font-size: 0.65rem;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .resize-handle {
+            position: absolute;
+            background: white;
+            border: 1px solid black;
+            border-radius: 50%;
+            z-index: 10;
+        }
+
+        .resize-handle.bottom {
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 11px;
+            height: 11px;
+            cursor: ns-resize;
+        }
+
+        /* Right Column: Review Fields */
+        .page-review-col {
+            flex: 1.2;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            width: 100%;
+        }
+
+        .stitching-bar {
+            background: rgba(15, 23, 42, 0.3);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 0.8rem 1rem;
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .checkbox-label input {
+            cursor: pointer;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .field-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .text-editor {
+            width: 100%;
+            height: 80px;
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--panel-border);
+            color: var(--text-primary);
+            padding: 0.7rem;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            resize: vertical;
+        }
+
+        .text-editor:focus {
+            border-color: var(--accent-primary);
+            outline: none;
+        }
+
+        .export-bar {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 2rem;
+            padding: 1.5rem 0;
+            border-top: 1px solid var(--panel-border);
+        }
+
+        /* Loading Screen */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 15, 25, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(139, 92, 246, 0.1);
+            border-top: 4px solid var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .loading-subtext {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            max-width: 450px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .toast-notification {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: #1e293b;
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--success);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1000;
+        }
+
+        .toast-notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <h1>CaDao Editor Suite</h1>
+        </div>
+        <div class="control-panel">
+            <select id="pdf-select">
+                <!-- PDF list -->
+            </select>
+            <div style="display:flex; align-items:center; gap:0.4rem">
+                <label for="start-page" style="font-size:0.85rem; color:var(--text-secondary)">Trang bắt đầu:</label>
+                <input type="number" id="start-page" value="1" min="1">
+            </div>
+            <div style="display:flex; align-items:center; gap:0.4rem">
+                <label for="batch-size" style="font-size:0.85rem; color:var(--text-secondary)">Số lượng:</label>
+                <select id="batch-size" style="padding: 0.5rem;">
+                    <option value="10" selected>10 trang</option>
+                    <option value="15">15 trang</option>
+                </select>
+            </div>
+            <button id="btn-load-batch">Tải Trang</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="workspace-stack" id="workspace-stack">
+            <!-- Page cards rendered here vertically -->
+            <div style="text-align: center; color: var(--text-secondary); padding: 5rem 0;">
+                Chọn tệp PDF và click "Tải Trang" để bắt đầu làm việc.
+            </div>
+        </div>
+
+        <div class="export-bar" id="export-bar" style="display: none;">
+            <button id="btn-confirm-layout" style="background: var(--accent-primary); font-size: 1.1rem; padding: 0.8rem 2.5rem; margin-right: 1.5rem;">
+                Xác nhận Layout & Trích xuất
+            </button>
+            <button id="btn-export-csv" style="background: var(--success); font-size: 1.1rem; padding: 0.8rem 2.5rem; display: none;">
+                Xác nhận & Xuất File CSV
+            </button>
+        </div>
+    </main>
+
+    <!-- Loading Screen -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">Đang tải...</div>
+        <div class="loading-subtext" id="loading-subtext">Vui lòng chờ trong giây lát.</div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast-notification" id="toast">
+        File đã được lưu thành công!
+    </div>
+
+    <script>
+        let selectedPdf = '';
+        let batchPages = []; // List of active page states loaded in memory
+        
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadPdfList();
+            await fetchProgress();
+            setupEventListeners();
+        });
+
+        async function fetchProgress() {
+            if (!selectedPdf) return;
+            try {
+                const res = await fetch(`/api/progress?pdf=${selectedPdf}`);
+                const data = await res.json();
+                document.getElementById('start-page').value = data.last_processed_page;
+            } catch (err) {
+                console.error("Error fetching progress:", err);
+            }
+        }
+
+        async function loadPdfList() {
+            try {
+                showLoading('Đang tải danh sách file PDF...', 'Tìm kiếm các tệp split PDF...');
+                const res = await fetch('/api/pdfs');
+                const data = await res.json();
+                const select = document.getElementById('pdf-select');
+                select.innerHTML = '';
+                data.pdfs.forEach(pdf => {
+                    const opt = document.createElement('option');
+                    opt.value = pdf;
+                    opt.textContent = pdf;
+                    select.appendChild(opt);
+                });
+                selectedPdf = select.value;
+                hideLoading();
+            } catch (err) {
+                console.error(err);
+                showLoading('Lỗi!', 'Không thể tải danh sách PDF.', true);
+            }
+        }
+
+        function setupEventListeners() {
+            document.getElementById('pdf-select').addEventListener('change', async (e) => {
+                selectedPdf = e.target.value;
+                await fetchProgress();
+            });
+
+            document.getElementById('btn-load-batch').addEventListener('click', loadBatch);
+            document.getElementById('btn-confirm-layout').addEventListener('click', confirmLayoutAndExtract);
+            document.getElementById('btn-export-csv').addEventListener('click', exportCsv);
+        }
+
+        function showLoading(text, subtext = '', isError = false) {
+            const overlay = document.getElementById('loading-overlay');
+            document.getElementById('loading-text').textContent = text;
+            document.getElementById('loading-subtext').textContent = subtext;
+            overlay.style.display = 'flex';
+            const spinner = overlay.querySelector('.spinner');
+            if (spinner) spinner.style.display = isError ? 'none' : 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        function showToast(message, isSuccess = true) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.borderLeftColor = isSuccess ? 'var(--success)' : 'var(--danger)';
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Load 10 or 15 pages in bulk
+        async function loadBatch() {
+            const startPage = parseInt(document.getElementById('start-page').value) || 1;
+            const batchSize = parseInt(document.getElementById('batch-size').value) || 10;
+            
+            if (!selectedPdf) {
+                alert('Vui lòng chọn file PDF.');
+                return;
+            }
+
+            try {
+                showLoading(
+                    'Đang tải trang...', 
+                    'Hệ thống đang chạy phát hiện vùng bố cục tự động (layout boxes). Vui lòng chờ...'
+                );
+                
+                const res = await fetch(`/api/load_pages?pdf=${selectedPdf}&start_page=${startPage}&batch_size=${batchSize}`);
+                const data = await res.json();
+                
+                if (data.error) {
+                    alert('Lỗi: ' + data.error);
+                    hideLoading();
+                    return;
+                }
+
+                batchPages = data.pages;
+                renderBatchStack();
+                
+                document.getElementById('export-bar').style.display = 'flex';
+                document.getElementById('btn-confirm-layout').style.display = 'inline-block';
+                document.getElementById('btn-export-csv').style.display = 'none';
+                
+                hideLoading();
+            } catch (err) {
+                console.error(err);
+                alert('Lỗi khi tải trang.');
+                hideLoading();
+            }
+        }
+
+        // Render scrollable page cards
+        function renderBatchStack() {
+            const container = document.getElementById('workspace-stack');
+            container.innerHTML = '';
+            
+            batchPages.forEach((page, idx) => {
+                const card = document.createElement('div');
+                card.className = 'page-card';
+                card.id = `page-card-${idx}`;
+                card.dataset.pageIndex = idx;
+                container.appendChild(card);
+                
+                renderPageCard(idx);
+            });
+        }
+
+        // Render card content for a single page
+        function renderPageCard(idx) {
+            const card = document.getElementById(`page-card-${idx}`);
+            if (!card) return;
+            
+            const page = batchPages[idx];
+            
+            // Retrieve last poem title from the previous page if available
+            let prevPoemTitle = "";
+            if (idx > 0) {
+                const prevPage = batchPages[idx - 1];
+                if (prevPage && prevPage.entries && prevPage.entries.length > 0) {
+                    const lastEntry = prevPage.entries[prevPage.entries.length - 1];
+                    prevPoemTitle = lastEntry.poem_corrected || lastEntry.poem_original || "";
+                    if (prevPoemTitle) {
+                        prevPoemTitle = prevPoemTitle.split('\n')[0].trim();
+                    }
+                }
+            }
+            
+            let stitchLabel = "Văn bản nối tiếp tự do";
+            if (prevPoemTitle) {
+                if (page.stitch_poem) {
+                    stitchLabel = `Nối tiếp phần thơ cho bài: "${prevPoemTitle}"`;
+                } else if (page.stitch_explanation || page.orphan_explanation) {
+                    stitchLabel = `Nối tiếp phần chú thích cho bài: "${prevPoemTitle}"`;
+                }
+            } else {
+                if (page.stitch_poem) {
+                    stitchLabel = "Nối tiếp phần thơ từ trang trước";
+                } else if (page.stitch_explanation || page.orphan_explanation) {
+                    stitchLabel = "Nối tiếp phần chú thích từ trang trước";
+                }
+            }
+            
+            // Header
+            let headerHtml = `
+                 <div class="page-card-title">Trang ${page.page_num}</div>
+                 <div style="display: flex; gap: 0.5rem;">
+                     <button class="secondary btn-toggle-box" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" onclick="addEntry(${idx})">+ Thêm mục</button>
+                     <button class="secondary btn-toggle-box" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" onclick="resetPageBoxes(${idx})">Reset Layout</button>
+                 </div>
+            `;
+            
+            // Body
+            let bodyHtml = `
+                <div class="page-card-body">
+                    <!-- Left Column: Image Editor -->
+                    <div class="page-image-col">
+                        <div class="box-toggle-bar" style="margin-bottom: 0.5rem;">
+                            <span style="font-size:0.8rem; color:var(--text-secondary); line-height: 2.2;">Di chuột lên thẻ bên phải để làm nổi bật khung hình.</span>
+                        </div>
+                        <div class="image-viewport" id="viewport-${idx}">
+                            <img class="page-image" src="/api/page_image?pdf=${selectedPdf}&page_idx=${page.page_idx}">
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column: Review Fields -->
+                    <div class="page-review-col" id="review-col-${idx}">
+                        <!-- Stitch options -->
+                        <div class="stitching-bar">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="stitch-poem-${idx}" ${page.stitch_poem ? 'checked' : ''} onchange="updateStitchState(${idx}, 'poem', this.checked)">
+                                Nối tiếp bài thơ từ trang trước
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="stitch-explanation-${idx}" ${page.stitch_explanation ? 'checked' : ''} onchange="updateStitchState(${idx}, 'explanation', this.checked)">
+                                Nối tiếp chú thích từ trang trước
+                            </label>
+                        </div>
+                        
+                        <!-- List of entries -->
+                        <div class="entries-list" id="entries-list-${idx}" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 0.5rem;">
+                            <!-- Individual entry forms -->
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            card.innerHTML = '';
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'page-card-header';
+            headerDiv.innerHTML = headerHtml;
+            card.appendChild(headerDiv);
+            
+            const bodyDiv = document.createElement('div');
+            bodyDiv.className = 'page-card-body';
+            bodyDiv.style.flexDirection = 'row';
+            bodyDiv.innerHTML = bodyHtml;
+            card.appendChild(bodyDiv);
+            
+            const reviewCol = card.querySelector(`#review-col-${idx}`);
+            if (reviewCol) {
+                reviewCol.style.display = 'flex';
+            }
+            
+            // Render the entry forms inside review column
+            renderEntryForms(idx);
+            
+            // Render overlays once image loads
+            const img = card.querySelector('.page-image');
+            img.onload = () => {
+                renderPageBoxes(idx);
+            };
+        }
+
+        // Get information about stitching / continuation for a page
+        function getContinuationInfo(pageIdx) {
+            let hasContinuationFromPrev = false;
+            let prevPageNum = null;
+            let prevEntry = null;
+            
+            if (pageIdx > 0) {
+                const prevPage = batchPages[pageIdx - 1];
+                if (prevPage && prevPage.entries && prevPage.entries.length > 0) {
+                    hasContinuationFromPrev = true;
+                    prevPageNum = prevPage.page_num;
+                    prevEntry = prevPage.entries[prevPage.entries.length - 1];
+                }
+            }
+            
+            let hasContinuationToNext = false;
+            let nextPageNum = null;
+            let nextPage = null;
+            
+            if (pageIdx < batchPages.length - 1) {
+                nextPage = batchPages[pageIdx + 1];
+                if (nextPage && (nextPage.stitch_poem || nextPage.stitch_explanation)) {
+                    hasContinuationToNext = true;
+                    nextPageNum = nextPage.page_num;
+                }
+            }
+            
+            return {
+                hasContinuationFromPrev,
+                prevPageNum,
+                prevEntry,
+                hasContinuationToNext,
+                nextPageNum,
+                nextPage
+            };
+        }
+
+        function updatePrevEntryText(pageIdx, field, value) {
+            if (pageIdx > 0) {
+                const prevPageIdx = pageIdx - 1;
+                const prevPage = batchPages[prevPageIdx];
+                if (prevPage && prevPage.entries && prevPage.entries.length > 0) {
+                    const lastIdx = prevPage.entries.length - 1;
+                    prevPage.entries[lastIdx][field] = value;
+                    savePageState(prevPageIdx);
+                    renderPageCard(prevPageIdx);
+                }
+            }
+        }
+
+        function updateNextOrphanText(pageIdx, value) {
+            if (pageIdx < batchPages.length - 1) {
+                const nextPageIdx = pageIdx + 1;
+                batchPages[nextPageIdx].orphan_explanation = value;
+                savePageState(nextPageIdx);
+                renderPageCard(nextPageIdx);
+            }
+        }
+
+        function updateOrphanText(pageIdx, value) {
+            batchPages[pageIdx].orphan_explanation = value;
+            savePageState(pageIdx);
+            
+            if (pageIdx > 0 && (batchPages[pageIdx].stitch_poem || batchPages[pageIdx].stitch_explanation)) {
+                renderPageCard(pageIdx - 1);
+            }
+        }
+
+        function highlightOrphanBox(pageIdx, highlight) {
+            const viewport = document.getElementById(`viewport-${pageIdx}`);
+            if (!viewport) return;
+            
+            viewport.querySelectorAll('.box-overlay').forEach(box => {
+                if (box.dataset.type === 'orphan') {
+                    if (highlight) {
+                        box.style.borderStyle = 'solid';
+                        box.style.borderWidth = '3px';
+                        box.style.boxShadow = '0 0 10px rgba(139, 92, 246, 0.4)';
+                    } else {
+                        box.style.borderStyle = 'dashed';
+                        box.style.borderWidth = '2px';
+                        box.style.boxShadow = 'none';
+                    }
+                }
+            });
+        }
+
+        // Render editor forms for each entry on a page
+        function renderEntryForms(pageIdx) {
+            const page = batchPages[pageIdx];
+            const entriesList = document.getElementById(`entries-list-${pageIdx}`);
+            if (!entriesList) return;
+            
+            entriesList.innerHTML = '';
+            
+            const info = getContinuationInfo(pageIdx);
+            
+            // 1. Render continuation entry panel from previous page (if stitch_poem or stitch_explanation is active)
+            if (info.hasContinuationFromPrev && (page.stitch_poem || page.stitch_explanation)) {
+                const prevEntry = info.prevEntry;
+                const entryPanel = document.createElement('div');
+                entryPanel.className = 'entry-panel continuation-panel';
+                entryPanel.style.border = '1px dashed var(--accent-primary)';
+                entryPanel.style.borderRadius = '10px';
+                entryPanel.style.padding = '1rem';
+                entryPanel.style.background = 'rgba(139, 92, 246, 0.03)';
+                entryPanel.style.display = 'flex';
+                entryPanel.style.flexDirection = 'column';
+                entryPanel.style.gap = '0.8rem';
+                entryPanel.style.position = 'relative';
+                
+                entryPanel.addEventListener('mouseenter', () => highlightOrphanBox(pageIdx, true));
+                entryPanel.addEventListener('mouseleave', () => highlightOrphanBox(pageIdx, false));
+                
+                const panelHeader = document.createElement('div');
+                panelHeader.style.display = 'flex';
+                panelHeader.style.justifyContent = 'space-between';
+                panelHeader.style.alignItems = 'center';
+                panelHeader.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                panelHeader.style.paddingBottom = '0.4rem';
+                
+                let linkTitle = prevEntry.poem_corrected || prevEntry.poem_original || "";
+                if (linkTitle) linkTitle = linkTitle.split('\n')[0].trim();
+                else linkTitle = "...";
+                
+                panelHeader.innerHTML = `
+                    <span style="font-weight: 700; color: var(--accent-primary); font-size: 0.9rem;">MỤC NỐI TIẾP (Từ Trang ${info.prevPageNum})</span>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary);">Liên kết bài: "${escapeHtml(linkTitle)}"</span>
+                `;
+                entryPanel.appendChild(panelHeader);
+                
+                const catGroup = document.createElement('div');
+                catGroup.className = 'field-group';
+                catGroup.innerHTML = `
+                    <label class="field-label">Phân Loại (Category)</label>
+                    <input type="text" value="${escapeHtml(prevEntry.category)}" disabled style="height: 40px; opacity: 0.6;">
+                `;
+                entryPanel.appendChild(catGroup);
+                
+                const poemGroup = document.createElement('div');
+                poemGroup.className = 'field-group';
+                if (page.stitch_poem) {
+                    poemGroup.innerHTML = `
+                        <label class="field-label" style="color: var(--poem-color);">Bài thơ - Phần 1 (Trang ${info.prevPageNum})</label>
+                        <textarea class="text-editor" style="height: 80px;" oninput="updatePrevEntryText(${pageIdx}, 'poem_corrected', this.value)">${escapeHtml(prevEntry.poem_corrected)}</textarea>
+                        
+                        <label class="field-label" style="color: var(--poem-color); margin-top: 0.5rem;">Bài thơ - Phần 2 (Trang ${page.page_num})</label>
+                        <textarea class="text-editor" style="height: 80px; border-color: var(--poem-color);" oninput="updateOrphanText(${pageIdx}, this.value)">${escapeHtml(page.orphan_explanation)}</textarea>
+                    `;
+                } else {
+                    poemGroup.innerHTML = `
+                        <label class="field-label">Bài thơ (Poem)</label>
+                        <textarea class="text-editor" disabled style="height: 80px; opacity: 0.6;">${escapeHtml(prevEntry.poem_corrected)}</textarea>
+                    `;
+                }
+                entryPanel.appendChild(poemGroup);
+                
+                const expGroup = document.createElement('div');
+                expGroup.className = 'field-group';
+                if (page.stitch_explanation) {
+                    expGroup.innerHTML = `
+                        <label class="field-label" style="color: var(--explanation-color);">Chú thích - Phần 1 (Trang ${info.prevPageNum})</label>
+                        <textarea class="text-editor" style="height: 100px;" oninput="updatePrevEntryText(${pageIdx}, 'explanation_corrected', this.value)">${escapeHtml(prevEntry.explanation_corrected)}</textarea>
+                        
+                        <label class="field-label" style="color: var(--explanation-color); margin-top: 0.5rem;">Chú thích - Phần 2 (Trang ${page.page_num})</label>
+                        <textarea class="text-editor" style="height: 100px; border-color: var(--explanation-color);" oninput="updateOrphanText(${pageIdx}, this.value)">${escapeHtml(page.orphan_explanation)}</textarea>
+                    `;
+                } else {
+                    expGroup.innerHTML = `
+                        <label class="field-label">Chú thích / Giải thích (Explanation)</label>
+                        <textarea class="text-editor" disabled style="height: 100px; opacity: 0.6;">${escapeHtml(prevEntry.explanation_corrected)}</textarea>
+                    `;
+                }
+                entryPanel.appendChild(expGroup);
+                
+                entriesList.appendChild(entryPanel);
+            }
+            
+            if (!page.entries || page.entries.length === 0) {
+                if (!(info.hasContinuationFromPrev && (page.stitch_poem || page.stitch_explanation))) {
+                    entriesList.innerHTML = `
+                        <div style="text-align: center; color: var(--text-secondary); padding: 1.5rem; border: 1px dashed var(--panel-border); border-radius: 8px;">
+                            Không có mục nào. Nhấn "+ Thêm mục" ở trên để tạo mục mới.
+                        </div>
+                    `;
+                }
+                return;
+            }
+            
+            page.entries.forEach((entry, entryIdx) => {
+                const entryPanel = document.createElement('div');
+                entryPanel.className = 'entry-panel';
+                entryPanel.style.border = '1px solid var(--panel-border)';
+                entryPanel.style.borderRadius = '10px';
+                entryPanel.style.padding = '1rem';
+                entryPanel.style.background = 'rgba(255,255,255,0.02)';
+                entryPanel.style.display = 'flex';
+                entryPanel.style.flexDirection = 'column';
+                entryPanel.style.gap = '0.8rem';
+                entryPanel.style.position = 'relative';
+                
+                entryPanel.dataset.pageIdx = pageIdx;
+                entryPanel.dataset.entryIdx = entryIdx;
+                
+                entryPanel.addEventListener('mouseenter', () => highlightEntryBoxes(pageIdx, entryIdx, true));
+                entryPanel.addEventListener('mouseleave', () => highlightEntryBoxes(pageIdx, entryIdx, false));
+                
+                const isLastEntry = (entryIdx === page.entries.length - 1);
+                const showNextContinuation = isLastEntry && info.hasContinuationToNext;
+                
+                const panelHeader = document.createElement('div');
+                panelHeader.style.display = 'flex';
+                panelHeader.style.justifyContent = 'space-between';
+                panelHeader.style.alignItems = 'center';
+                panelHeader.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                panelHeader.style.paddingBottom = '0.4rem';
+                
+                let headerText = `MỤC SỐ #${entryIdx + 1}`;
+                if (showNextContinuation) {
+                    headerText += ` (Nối tiếp sang Trang ${info.nextPageNum})`;
+                    entryPanel.style.border = '1px dashed var(--accent-primary)';
+                    entryPanel.style.background = 'rgba(139, 92, 246, 0.01)';
+                }
+                
+                panelHeader.innerHTML = `
+                    <span style="font-weight: 700; color: var(--accent-primary); font-size: 0.9rem;">${headerText}</span>
+                    <button class="secondary btn-toggle-box" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; background: var(--danger-bg); color: var(--danger);" onclick="deleteEntry(${pageIdx}, ${entryIdx})">Xoá mục</button>
+                `;
+                entryPanel.appendChild(panelHeader);
+                
+                const boxToggles = document.createElement('div');
+                boxToggles.style.display = 'flex';
+                boxToggles.style.gap = '0.3rem';
+                boxToggles.innerHTML = `
+                    <button class="btn-toggle-box ${entry.boxes.poem ? 'active-poem' : ''}" style="font-size:0.75rem; padding:0.25rem 0.5rem;" onclick="toggleBoxType(${pageIdx}, ${entryIdx}, 'poem')">
+                        ${entry.boxes.poem ? 'Xoá khung Thơ' : '+ Khung Thơ'}
+                    </button>
+                    <button class="btn-toggle-box ${entry.boxes.category ? 'active-category' : ''}" style="font-size:0.75rem; padding:0.25rem 0.5rem;" onclick="toggleBoxType(${pageIdx}, ${entryIdx}, 'category')">
+                        ${entry.boxes.category ? 'Xoá khung Phân loại' : '+ Khung Phân loại'}
+                    </button>
+                    <button class="btn-toggle-box ${entry.boxes.explanation ? 'active-explanation' : ''}" style="font-size:0.75rem; padding:0.25rem 0.5rem;" onclick="toggleBoxType(${pageIdx}, ${entryIdx}, 'explanation')">
+                        ${entry.boxes.explanation ? 'Xoá khung Chú thích' : '+ Khung Chú thích'}
+                    </button>
+                `;
+                entryPanel.appendChild(boxToggles);
+                
+                const catGroup = document.createElement('div');
+                catGroup.className = 'field-group';
+                catGroup.innerHTML = `
+                    <label class="field-label">Phân Loại (Category)</label>
+                    <input type="text" id="category-editor-${pageIdx}-${entryIdx}" value="${escapeHtml(entry.category)}" style="height: 40px;" oninput="updateEntryText(${pageIdx}, ${entryIdx}, 'category', this.value)">
+                `;
+                entryPanel.appendChild(catGroup);
+                
+                const poemGroup = document.createElement('div');
+                poemGroup.className = 'field-group';
+                if (showNextContinuation && info.nextPage.stitch_poem) {
+                    poemGroup.innerHTML = `
+                        <label class="field-label" style="color: var(--poem-color);">Bài thơ - Phần 1 (Trang ${page.page_num})</label>
+                        <textarea class="text-editor" id="poem-editor-${pageIdx}-${entryIdx}" style="height: 80px;" oninput="updateEntryText(${pageIdx}, ${entryIdx}, 'poem_corrected', this.value)">${escapeHtml(entry.poem_corrected)}</textarea>
+                        
+                        <label class="field-label" style="color: var(--poem-color); margin-top: 0.5rem;">Bài thơ - Phần 2 (Trang ${info.nextPageNum})</label>
+                        <textarea class="text-editor" style="height: 80px; border-color: var(--poem-color);" oninput="updateNextOrphanText(${pageIdx}, this.value)">${escapeHtml(info.nextPage.orphan_explanation)}</textarea>
+                    `;
+                } else {
+                    poemGroup.innerHTML = `
+                        <label class="field-label">Bài thơ (Poem)</label>
+                        <textarea class="text-editor" id="poem-editor-${pageIdx}-${entryIdx}" style="height: 100px;" oninput="updateEntryText(${pageIdx}, ${entryIdx}, 'poem_corrected', this.value)">${escapeHtml(entry.poem_corrected)}</textarea>
+                    `;
+                }
+                entryPanel.appendChild(poemGroup);
+                
+                const expGroup = document.createElement('div');
+                expGroup.className = 'field-group';
+                if (showNextContinuation && info.nextPage.stitch_explanation) {
+                    expGroup.innerHTML = `
+                        <label class="field-label" style="color: var(--explanation-color);">Chú thích - Phần 1 (Trang ${page.page_num})</label>
+                        <textarea class="text-editor" id="explanation-editor-${pageIdx}-${entryIdx}" style="height: 100px;" oninput="updateEntryText(${pageIdx}, ${entryIdx}, 'explanation_corrected', this.value)">${escapeHtml(entry.explanation_corrected)}</textarea>
+                        
+                        <label class="field-label" style="color: var(--explanation-color); margin-top: 0.5rem;">Chú thích - Phần 2 (Trang ${info.nextPageNum})</label>
+                        <textarea class="text-editor" style="height: 100px; border-color: var(--explanation-color);" oninput="updateNextOrphanText(${pageIdx}, this.value)">${escapeHtml(info.nextPage.orphan_explanation)}</textarea>
+                    `;
+                } else {
+                    expGroup.innerHTML = `
+                        <label class="field-label">Chú thích / Giải thích (Explanation)</label>
+                        <textarea class="text-editor" id="explanation-editor-${pageIdx}-${entryIdx}" style="height: 140px;" oninput="updateEntryText(${pageIdx}, ${entryIdx}, 'explanation_corrected', this.value)">${escapeHtml(entry.explanation_corrected)}</textarea>
+                    `;
+                }
+                entryPanel.appendChild(expGroup);
+                
+                entriesList.appendChild(entryPanel);
+            });
+        }
+
+        // Highlight entry overlays in viewport
+        function highlightEntryBoxes(pageIdx, entryIdx, highlight) {
+            const viewport = document.getElementById(`viewport-${pageIdx}`);
+            if (!viewport) return;
+            
+            viewport.querySelectorAll('.box-overlay').forEach(box => {
+                if (parseInt(box.dataset.entryIdx) === entryIdx) {
+                    if (highlight) {
+                        box.style.borderStyle = 'solid';
+                        box.style.borderWidth = '3px';
+                        box.style.boxShadow = '0 0 10px rgba(139, 92, 246, 0.4)';
+                    } else {
+                        box.style.borderStyle = 'dashed';
+                        box.style.borderWidth = '2px';
+                        box.style.boxShadow = 'none';
+                    }
+                }
+            });
+        }
+
+        // Add an entry panel manually
+        function addEntry(pageIdx) {
+            const page = batchPages[pageIdx];
+            if (!page.entries) page.entries = [];
+            
+            let nextY = 0.1;
+            if (page.entries.length > 0) {
+                const lastEntry = page.entries[page.entries.length - 1];
+                if (lastEntry.boxes.explanation) {
+                    nextY = lastEntry.boxes.explanation.y + lastEntry.boxes.explanation.h + 0.05;
+                } else if (lastEntry.boxes.category) {
+                    nextY = lastEntry.boxes.category.y + lastEntry.boxes.category.h + 0.05;
+                }
+            }
+            if (nextY > 0.8) nextY = 0.3; // wrapping fallback
+            
+            const newEntry = {
+                entry_idx: page.entries.length,
+                boxes: {
+                    poem: { x: 0.1, y: nextY, w: 0.8, h: 0.15 },
+                    category: { x: 0.15, y: nextY + 0.16, w: 0.7, h: 0.04 },
+                    explanation: { x: 0.1, y: nextY + 0.21, w: 0.8, h: 0.2 }
+                },
+                category: '(CA DAO)',
+                poem_original: '',
+                poem_corrected: '',
+                explanation_original: '',
+                explanation_corrected: ''
+            };
+            page.entries.push(newEntry);
+            renderPageCard(pageIdx);
+            savePageState(pageIdx);
+        }
+
+        // Delete entry panel
+        function deleteEntry(pageIdx, entryIdx) {
+            const page = batchPages[pageIdx];
+            page.entries.splice(entryIdx, 1);
+            
+            // Re-index remaining entries
+            page.entries.forEach((entry, idx) => {
+                entry.entry_idx = idx;
+            });
+            
+            renderPageCard(pageIdx);
+            savePageState(pageIdx);
+        }
+
+        // Update single text value in entries list
+        function updateEntryText(pageIdx, entryIdx, field, value) {
+            batchPages[pageIdx].entries[entryIdx][field] = value;
+            savePageState(pageIdx);
+            
+            // If this is the last entry and it has next page continuation, re-render next page to sync
+            const page = batchPages[pageIdx];
+            const isLast = (entryIdx === page.entries.length - 1);
+            if (isLast && pageIdx < batchPages.length - 1) {
+                const nextPage = batchPages[pageIdx + 1];
+                if (nextPage && (nextPage.stitch_poem || nextPage.stitch_explanation)) {
+                    renderPageCard(pageIdx + 1);
+                }
+            }
+        }
+
+        // Render draggable overlays inside page card viewport
+        function renderPageBoxes(pageIdx) {
+            const page = batchPages[pageIdx];
+            const viewport = document.getElementById(`viewport-${pageIdx}`);
+            if (!viewport) return;
+            viewport.querySelectorAll('.box-overlay').forEach(el => el.remove());
+            
+            if (page.entries) {
+                page.entries.forEach((entry, entryIdx) => {
+                    if (entry.boxes.poem) {
+                        createDraggableBox(pageIdx, entryIdx, viewport, 'poem', entry.boxes.poem, 'Bài thơ');
+                    }
+                    if (entry.boxes.category) {
+                        createDraggableBox(pageIdx, entryIdx, viewport, 'category', entry.boxes.category, 'Phân loại');
+                    }
+                    if (entry.boxes.explanation) {
+                        createDraggableBox(pageIdx, entryIdx, viewport, 'explanation', entry.boxes.explanation, 'Chú thích');
+                    }
+                });
+            }
+            
+            // Draw continuation box if present
+            if (page.orphan_box) {
+                let boxClass = 'explanation-box';
+                let label = 'Nối tiếp';
+                if (page.stitch_poem) {
+                    boxClass = 'poem-box';
+                    label = 'Bài thơ (Phần 2)';
+                } else if (page.stitch_explanation) {
+                    boxClass = 'explanation-box';
+                    label = 'Chú thích (Phần 2)';
+                } else {
+                    boxClass = 'explanation-box';
+                    label = 'Chú thích (Nối tiếp)';
+                }
+                createDraggableOrphanBox(pageIdx, viewport, page.orphan_box, label, boxClass);
+            }
+        }
+
+        // Toggle a box's visibility/existence for an entry
+        function toggleBoxType(pageIdx, entryIdx, type) {
+            const page = batchPages[pageIdx];
+            const entry = page.entries[entryIdx];
+            if (entry.boxes[type]) {
+                entry.boxes[type] = null;
+            } else {
+                let yVal = 0.1;
+                if (type === 'poem') yVal = 0.15;
+                else if (type === 'category') yVal = 0.38;
+                else if (type === 'explanation') yVal = 0.45;
+                
+                entry.boxes[type] = { x: 0.1, y: yVal, w: 0.8, h: type === 'category' ? 0.05 : 0.2 };
+            }
+            renderPageCard(pageIdx);
+            savePageState(pageIdx);
+        }
+
+        // Create draggable bounding box overlay
+        function createDraggableBox(pageIdx, entryIdx, container, type, coords, labelText) {
+            const box = document.createElement('div');
+            box.className = `box-overlay ${type}-box`;
+            box.dataset.type = type;
+            box.dataset.entryIdx = entryIdx;
+            
+            box.style.left = `${coords.x * 100}%`;
+            box.style.top = `${coords.y * 100}%`;
+            box.style.width = `${coords.w * 100}%`;
+            box.style.height = `${coords.h * 100}%`;
+            
+            const label = document.createElement('div');
+            label.className = 'box-label';
+            label.textContent = `[${entryIdx + 1}] ${labelText}`;
+            box.appendChild(label);
+            
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle bottom';
+            box.appendChild(handle);
+            
+            container.appendChild(box);
+            setupDragResize(pageIdx, entryIdx, box, container, type);
+        }
+
+        // Setup drag and resize callbacks for overlay boxes
+        function setupDragResize(pageIdx, entryIdx, box, container, type) {
+            let isDragging = false;
+            let isResizing = false;
+            let startY, startX, startTop, startLeft, startHeight, startWidth;
+            
+            const handle = box.querySelector('.resize-handle');
+            
+            box.addEventListener('mousedown', (e) => {
+                if (e.target === handle) isResizing = true;
+                else isDragging = true;
+                
+                startX = e.clientX;
+                startY = e.clientY;
+                
+                const rect = container.getBoundingClientRect();
+                startTop = (box.offsetTop / rect.height) * 100;
+                startLeft = (box.offsetLeft / rect.width) * 100;
+                startHeight = (box.offsetHeight / rect.height) * 100;
+                startWidth = (box.offsetWidth / rect.width) * 100;
+                
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging && !isResizing) return;
+                
+                const rect = container.getBoundingClientRect();
+                const deltaY = ((e.clientY - startY) / rect.height) * 100;
+                const deltaX = ((e.clientX - startX) / rect.width) * 100;
+                
+                if (isDragging) {
+                    let newTop = Math.max(0, Math.min(100 - startHeight, startTop + deltaY));
+                    let newLeft = Math.max(0, Math.min(100 - startWidth, startLeft + deltaX));
+                    box.style.top = `${newTop}%`;
+                    box.style.left = `${newLeft}%`;
+                    
+                    batchPages[pageIdx].entries[entryIdx].boxes[type].y = newTop / 100.0;
+                    batchPages[pageIdx].entries[entryIdx].boxes[type].x = newLeft / 100.0;
+                }
+                
+                if (isResizing) {
+                    let newHeight = Math.max(2, Math.min(100 - startTop, startHeight + deltaY));
+                    box.style.height = `${newHeight}%`;
+                    
+                    batchPages[pageIdx].entries[entryIdx].boxes[type].h = newHeight / 100.0;
+                }
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isDragging || isResizing) {
+                    isDragging = false;
+                    isResizing = false;
+                    savePageState(pageIdx); // Save boxes to server
+                }
+            });
+        }
+
+        // Create draggable bounding box overlay for continuation box
+        function createDraggableOrphanBox(pageIdx, container, coords, labelText, boxClass) {
+            if (!coords) return;
+            const box = document.createElement('div');
+            box.className = `box-overlay ${boxClass}`;
+            box.dataset.type = 'orphan';
+            box.dataset.pageIdx = pageIdx;
+            
+            box.style.left = `${coords.x * 100}%`;
+            box.style.top = `${coords.y * 100}%`;
+            box.style.width = `${coords.w * 100}%`;
+            box.style.height = `${coords.h * 100}%`;
+            
+            const label = document.createElement('div');
+            label.className = 'box-label';
+            label.textContent = labelText;
+            box.appendChild(label);
+            
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle bottom';
+            box.appendChild(handle);
+            
+            container.appendChild(box);
+            setupDragResizeOrphan(pageIdx, box, container);
+        }
+
+        // Setup drag and resize callbacks for continuation box
+        function setupDragResizeOrphan(pageIdx, box, container) {
+            let isDragging = false;
+            let isResizing = false;
+            let startY, startX, startTop, startLeft, startHeight, startWidth;
+            
+            const handle = box.querySelector('.resize-handle');
+            
+            box.addEventListener('mousedown', (e) => {
+                if (e.target === handle) isResizing = true;
+                else isDragging = true;
+                
+                startX = e.clientX;
+                startY = e.clientY;
+                
+                const rect = container.getBoundingClientRect();
+                startTop = (box.offsetTop / rect.height) * 100;
+                startLeft = (box.offsetLeft / rect.width) * 100;
+                startHeight = (box.offsetHeight / rect.height) * 100;
+                startWidth = (box.offsetWidth / rect.width) * 100;
+                
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging && !isResizing) return;
+                
+                const rect = container.getBoundingClientRect();
+                const deltaY = ((e.clientY - startY) / rect.height) * 100;
+                const deltaX = ((e.clientX - startX) / rect.width) * 100;
+                
+                if (isDragging) {
+                    let newTop = Math.max(0, Math.min(100 - startHeight, startTop + deltaY));
+                    let newLeft = Math.max(0, Math.min(100 - startWidth, startLeft + deltaX));
+                    box.style.top = `${newTop}%`;
+                    box.style.left = `${newLeft}%`;
+                    
+                    if (!batchPages[pageIdx].orphan_box) batchPages[pageIdx].orphan_box = {};
+                    batchPages[pageIdx].orphan_box.y = newTop / 100.0;
+                    batchPages[pageIdx].orphan_box.x = newLeft / 100.0;
+                    batchPages[pageIdx].orphan_box.w = startWidth / 100.0;
+                    batchPages[pageIdx].orphan_box.h = startHeight / 100.0;
+                }
+                
+                if (isResizing) {
+                    let newHeight = Math.max(2, Math.min(100 - startTop, startHeight + deltaY));
+                    box.style.height = `${newHeight}%`;
+                    
+                    if (!batchPages[pageIdx].orphan_box) batchPages[pageIdx].orphan_box = {};
+                    batchPages[pageIdx].orphan_box.y = startTop / 100.0;
+                    batchPages[pageIdx].orphan_box.x = startLeft / 100.0;
+                    batchPages[pageIdx].orphan_box.w = startWidth / 100.0;
+                    batchPages[pageIdx].orphan_box.h = newHeight / 100.0;
+                }
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isDragging || isResizing) {
+                    isDragging = false;
+                    isResizing = false;
+                    savePageState(pageIdx); // Save boxes to server
+                }
+            });
+        }
+
+        // Confirm layout of batch pages and request backend text extraction
+        async function confirmLayoutAndExtract() {
+            try {
+                showLoading(
+                    'Đang trích xuất OCR...', 
+                    'Hệ thống đang trích xuất văn bản từ các vùng bố cục và lưu vào JSON. Vui lòng chờ...'
+                );
+                
+                const res = await fetch('/api/process_batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pdf: selectedPdf,
+                        pages: batchPages.map(p => ({
+                            page_idx: p.page_idx,
+                            stitch_poem: p.stitch_poem,
+                            stitch_explanation: p.stitch_explanation,
+                            orphan_box: p.orphan_box,
+                            entries: p.entries
+                        }))
+                    })
+                });
+                
+                const data = await res.json();
+                hideLoading();
+                
+                if (data.error) {
+                    alert('Lỗi: ' + data.error);
+                    return;
+                }
+                
+                // Update batchPages with the returned texts
+                data.pages.forEach((p, idx) => {
+                    batchPages[idx].stitch_poem = p.stitch_poem;
+                    batchPages[idx].stitch_explanation = p.stitch_explanation;
+                    batchPages[idx].orphan_explanation = p.orphan_explanation;
+                    batchPages[idx].orphan_box = p.orphan_box;
+                    batchPages[idx].entries = p.entries;
+                });
+                
+                // Show review fields and render content
+                batchPages.forEach((page, idx) => {
+                    renderPageCard(idx);
+                });
+                
+                // Hide confirm layout button and show export csv button
+                document.getElementById('btn-confirm-layout').style.display = 'none';
+                document.getElementById('btn-export-csv').style.display = 'inline-block';
+                
+                showToast('Trích xuất thành công! Vui lòng kiểm tra và sửa đổi trước khi xuất CSV.');
+            } catch (err) {
+                console.error(err);
+                alert('Lỗi kết nối khi trích xuất.');
+                hideLoading();
+            }
+        }
+
+        // Keep stitch updates locally and save
+        function updateStitchState(pageIdx, fieldName, value) {
+            if (fieldName === 'poem') {
+                batchPages[pageIdx].stitch_poem = value;
+            } else if (fieldName === 'explanation') {
+                batchPages[pageIdx].stitch_explanation = value;
+            }
+            renderPageCard(pageIdx);
+            savePageState(pageIdx);
+        }
+
+        // Reset overlays to the initial auto-detected boxes
+        async function resetPageBoxes(pageIdx) {
+            const page = batchPages[pageIdx];
+            try {
+                showLoading('Đang reset layout...', `Resetting page ${page.page_num}...`);
+                const res = await fetch(`/api/reset_boxes?pdf=${selectedPdf}&page_idx=${page.page_idx}`);
+                const data = await res.json();
+                batchPages[pageIdx].entries = data.entries;
+                batchPages[pageIdx].orphan_explanation = data.orphan_explanation;
+                renderPageCard(pageIdx);
+                await savePageState(pageIdx);
+                hideLoading();
+            } catch (err) {
+                console.error(err);
+                hideLoading();
+            }
+        }
+
+        async function savePageState(pageIdx) {
+            const page = batchPages[pageIdx];
+            try {
+                await fetch('/api/save_page_state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pdf: selectedPdf,
+                        page_idx: page.page_idx,
+                        state: page
+                    })
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function exportCsv() {
+            try {
+                // Save all active page states first
+                showLoading('Đang lưu trạng thái...', 'Đồng bộ hóa toàn bộ các trang với backend...');
+                for (let i = 0; i < batchPages.length; i++) {
+                    await savePageState(i);
+                }
+                
+                showLoading('Đang xuất file CSV...', 'Kết nối các trang và xuất file CSV...');
+                const res = await fetch('/api/save_csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pdf: selectedPdf,
+                        page_indices: batchPages.map(p => p.page_idx)
+                    })
+                });
+                
+                const data = await res.json();
+                hideLoading();
+                
+                if (data.error) {
+                    alert('Lỗi khi lưu file: ' + data.error);
+                } else {
+                    showToast(`File đã xuất thành công: ${data.filename}`);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Lỗi kết nối khi xuất CSV.');
+                hideLoading();
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

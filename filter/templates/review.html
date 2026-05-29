@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hồn Việt - Editor & Review Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/review.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="header-container">
+            <div class="logo-area">
+                <span class="lotus-icon">🎋</span>
+                <h1>Hồn Việt <span class="subtitle">Editor Dashboard</span></h1>
+            </div>
+            
+            <div class="progress-container">
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar" id="progress-bar" style="width: 0%;"></div>
+                </div>
+                <div class="progress-text">
+                    Đã xem: <span id="reviewed-count" class="badge">0</span> / <span id="total-count">0</span> (<span id="progress-percent">0%</span>)
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <div class="nav-jump">
+                    <input type="number" id="jump-input" placeholder="ID thơ..." min="1">
+                    <button id="jump-btn" class="btn btn-sand">Đi tới</button>
+                </div>
+                <button id="add-btn" class="btn btn-green">+ Thêm bài mới</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="editor-main">
+        <div class="editor-card">
+            <div class="editor-header">
+                <div class="id-badge">
+                    ID: <span id="poem-id">-</span>
+                </div>
+                
+                <div class="metadata-grid">
+                    <div class="metadata-item">
+                        <label for="poem-category">Thể loại</label>
+                        <select id="poem-category">
+                            <option value="(CA DAO)">(CA DAO)</option>
+                            <option value="(CA DAO HÁN VIỆT)">(CA DAO HÁN VIỆT)</option>
+                            <option value="(THÀNH NGỮ)">(THÀNH NGỮ)</option>
+                            <option value="(THÀNH NGỮ HÁN VIỆT)">(THÀNH NGỮ HÁN VIỆT)</option>
+                            <option value="(TỤC NGỮ)">(TỤC NGỮ)</option>
+                            <option value="(TỤC NGỮ HÁN VIỆT)">(TỤC NGỮ HÁN VIỆT)</option>
+                        </select>
+                    </div>
+
+                    <div class="metadata-item">
+                        <label for="poem-book">Quyển</label>
+                        <select id="poem-book">
+                            <option value="TỪ ĐIỂN TỤC NGỮ THÀNH NGỮ CA DAO VIỆT NAM - Quyển Thượng">Quyển Thượng</option>
+                            <option value="TỪ ĐIỂN TỤC NGỮ THÀNH NGỮ CA DAO VIỆT NAM - Quyển Hạ">Quyển Hạ</option>
+                        </select>
+                    </div>
+
+                    <div class="metadata-item">
+                        <label for="poem-type">Thể loại phụ (Type)</label>
+                        <div class="type-input-group">
+                            <select id="poem-type">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <button id="add-type-btn" class="btn btn-sand" title="Thêm thể loại phụ">+</button>
+                        </div>
+                    </div>
+
+                    <div class="metadata-item keyword-item">
+                        <label>Từ khóa (Chips - Ít nhất 1)</label>
+                        <div class="keyword-selector-wrapper">
+                            <div class="chips-container" id="chips-container">
+                                <!-- Populated dynamically -->
+                            </div>
+                            <div class="search-select-wrapper">
+                                <input type="text" id="keyword-search-input" placeholder="Tìm & thêm từ khóa..." autocomplete="off">
+                                <div class="keyword-dropdown" id="keyword-dropdown">
+                                    <!-- Options populated dynamically -->
+                                </div>
+                            </div>
+                            <button id="add-keyword-btn" class="btn btn-sand" title="Thêm từ khóa mới">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-indicator" id="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Chưa chỉnh sửa</span>
+                </div>
+            </div>
+
+            <div class="editor-body">
+                <div class="form-group poem-group">
+                    <div class="label-row">
+                        <label for="poem-text">Lời thơ / Câu hát</label>
+                        <div class="syllable-legend">Nhịp lục bát (6/8)</div>
+                    </div>
+                    <div class="editor-textarea-container">
+                        <textarea id="poem-text" placeholder="Lời ca dao tục ngữ..." rows="4"></textarea>
+                        <div class="syllable-display" id="syllable-display">
+                            <!-- JS will populate syllable count per line here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group explanation-group">
+                    <div class="label-row">
+                        <label for="poem-explanation">Lời giải nghĩa / Điển tích (Interpretation)</label>
+                    </div>
+                    <textarea id="poem-explanation" placeholder="Nghĩa của câu ca dao tục ngữ và câu chuyện (nếu có)..." rows="12"></textarea>
+                </div>
+            </div>
+
+            <div class="editor-footer">
+                <div class="nav-buttons">
+                    <button id="prev-btn" class="btn btn-secondary">
+                        ← Trước (<span id="prev-id-text">-</span>)
+                    </button>
+                    <button id="delete-btn" class="btn btn-red">
+                        🗑 Xóa bài này
+                    </button>
+                    <button id="save-btn" class="btn btn-primary">
+                        Lưu & Kế tiếp
+                    </button>
+                    <button id="next-btn" class="btn btn-secondary">
+                        Kế tiếp (<span id="next-id-text">-</span>) →
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom JS -->
+    <script src="/static/js/review.js"></script>
+</body>
+</html>
