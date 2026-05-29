@@ -6,3 +6,6 @@
 0 | Ẩn danh | like | 
 0 | Ẩn danh | dislike | 
 0 | Ẩn danh | like | 
+0 | Ẩn danh | like | 
+0 | Ẩn danh | like | 
+0 | Ẩn danh | like | 

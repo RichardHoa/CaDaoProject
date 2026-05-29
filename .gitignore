@@ -37,3 +37,8 @@ claude_config.json
 # IDEs
 .vscode/
 .idea/
+
+*.pdf
+
+
+*.json

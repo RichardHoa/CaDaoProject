@@ -9,3 +9,5 @@ plotly
 hdbscan
 umap-learn
 waitress
+pyobjc-core
+pyobjc-framework-Vision
