@@ -3,6 +3,8 @@ import re
 import csv
 import io
 import json as py_json
+import cv2
+import numpy as np
 import tempfile
 from flask import Flask, request, jsonify, render_template, send_file
 import fitz  # PyMuPDF
@@ -36,8 +38,74 @@ def is_category(text):
             return True
     return False
 
+def _preprocess_page_image(pix):
+    """
+    Applies a multi-step OpenCV pre-processing pipeline to a PyMuPDF pixmap
+    to improve Apple Vision OCR accuracy on old/scanned Vietnamese books.
+
+    Steps:
+      1. Bilateral filter   – removes noise while keeping character edges sharp.
+      2. Adaptive binarization – handles uneven lighting and faint characters.
+      3. Global deskew      – corrects page tilt using median contour angle.
+      4. Diacritic thickening – erodes white background to thicken thin strokes.
+
+    Returns a processed grayscale numpy array ready to be saved as PNG.
+    """
+    # Decode pixmap bytes → OpenCV BGR image
+    img_bytes = pix.tobytes("png")
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Step 1: Bilateral filter – smooth noise, preserve character edges
+    denoised = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
+
+    # Step 2: Adaptive binarization – handles shadows and faded ink
+    binary = cv2.adaptiveThreshold(
+        denoised, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        blockSize=31, C=10
+    )
+
+    # Step 3: Global deskew via contour median angle
+    # Find all dark (text) contours on the binarized image
+    inv = cv2.bitwise_not(binary)
+    contours, _ = cv2.findContours(inv, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    angles = []
+    for cnt in contours:
+        if cv2.contourArea(cnt) < 100:  # skip tiny noise blobs
+            continue
+        rect = cv2.minAreaRect(cnt)
+        angle = rect[-1]  # angle in [-90, 0)
+        if angle < -45:
+            angle = 90 + angle
+        if abs(angle) <= 45:
+            angles.append(angle)
+
+    if angles:
+        median_angle = float(np.median(angles))
+        if abs(median_angle) > 0.5:  # only rotate if skew is meaningful
+            h, w = binary.shape
+            center = (w // 2, h // 2)
+            M = cv2.getRotationMatrix2D(center, median_angle, 1.0)
+            binary = cv2.warpAffine(
+                binary, M, (w, h),
+                flags=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_CONSTANT,
+                borderValue=255
+            )
+
+    # Step 4: Diacritic thickening – erode white background → thicken black strokes
+    # A 2x1 vertical kernel targets thin horizontal diacritics (dot-below, breve, hook)
+    kernel = np.ones((2, 1), np.uint8)
+    enhanced = cv2.erode(binary, kernel, iterations=1)
+
+    return enhanced
+
+
 def run_apple_ocr(page, page_idx):
-    """Executes Apple Vision OCR on a rendered page pixmap and returns text lines with coordinates."""
+    """Executes Apple Vision OCR on a pre-processed rendered page pixmap and returns text lines with coordinates."""
     temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scratch")
     os.makedirs(temp_dir, exist_ok=True)
     
@@ -45,8 +113,12 @@ def run_apple_ocr(page, page_idx):
         temp_img_path = temp_file.name
         
     try:
-        pix = page.get_pixmap(dpi=150)
-        pix.save(temp_img_path)
+        # 1. High-resolution rendering
+        pix = page.get_pixmap(dpi=300)
+
+        # 2. Apply OpenCV pre-processing pipeline before OCR
+        processed = _preprocess_page_image(pix)
+        cv2.imwrite(temp_img_path, processed)
         
         url = NSURL.fileURLWithPath_(temp_img_path)
         handler = VNImageRequestHandler.alloc().initWithURL_options_(url, None)
@@ -120,10 +192,10 @@ def get_bbox_of_lines(lines_list):
     x1 = max(l['x'] + l['w'] for l in lines_list)
     y1 = max(l['y'] + l['h'] for l in lines_list)
     return {
-        'x': max(0.0, x0 - 0.01),
-        'y': max(0.0, y0 - 0.01),
-        'w': min(1.0, x1 - x0 + 0.02),
-        'h': min(1.0, y1 - y0 + 0.02)
+        'x': max(0.0, x0 - 0.004),
+        'y': max(0.0, y0 - 0.004),
+        'w': min(1.0, x1 - x0 + 0.008),
+        'h': min(1.0, y1 - y0 + 0.008)
     }
 
 def get_initial_boxes(lines):
@@ -183,10 +255,10 @@ def get_initial_boxes(lines):
             poem_box = get_bbox_of_lines(poem_lines)
             
             category_box = {
-                'x': max(0.0, category_line['x'] - 0.01),
-                'y': max(0.0, category_line['y'] - 0.01),
-                'w': min(1.0, category_line['w'] + 0.02),
-                'h': min(1.0, category_line['h'] + 0.02)
+                'x': max(0.0, category_line['x'] - 0.004),
+                'y': max(0.0, category_line['y'] - 0.004),
+                'w': min(1.0, category_line['w'] + 0.008),
+                'h': min(1.0, category_line['h'] + 0.008)
             }
             
             explanation_box = get_bbox_of_lines(explanation_lines)
@@ -199,8 +271,8 @@ def get_initial_boxes(lines):
                     'explanation': explanation_box
                 },
                 'category': category_line['text'].strip(),
-                'poem_original': "\n".join(l['text'].strip() for l in sorted(poem_lines, key=lambda l: (l['y'], l['x']))),
-                'poem_corrected': "\n".join(l['text'].strip() for l in sorted(poem_lines, key=lambda l: (l['y'], l['x']))),
+                'poem_original': join_poem_lines(poem_lines),
+                'poem_corrected': join_poem_lines(poem_lines),
                 'explanation_original': join_explanation_lines_with_spacing(explanation_lines),
                 'explanation_corrected': join_explanation_lines_with_spacing(explanation_lines)
             })
@@ -211,33 +283,138 @@ def get_initial_boxes(lines):
     orphan_box = get_bbox_of_lines(orphan_lines) if orphan_lines else None
     return entries, orphan_text, orphan_box
 
-def join_explanation_lines_with_spacing(lines_list):
-    """Joins explanation lines, using vertical spacing gaps to preserve paragraph bounds."""
+def join_poem_lines(lines_list):
+    """Joins poem lines, reconstructing verses that were wrapped due to page width."""
     if not lines_list:
         return ""
     
+    # Sort top-to-bottom, left-to-right
     lines_sorted = sorted(lines_list, key=lambda l: (l['y'], l['x']))
     
-    text_parts = [lines_sorted[0]['text'].strip()]
+    result = []
+    current_verse = []
+    
+    for i, line in enumerate(lines_sorted):
+        text = line['text'].strip()
+        if not text:
+            continue
+            
+        if i == 0:
+            current_verse.append(text)
+            continue
+            
+        # If the line starts with a lowercase letter, it is a continuation of the previous verse line
+        first_char = text[0] if text else ''
+        if first_char.islower():
+            current_verse.append(text)
+        else:
+            result.append(" ".join(current_verse))
+            current_verse = [text]
+            
+    if current_verse:
+        result.append(" ".join(current_verse))
+        
+    return "\n".join(result)
+
+
+def join_explanation_lines_with_spacing(lines_list):
+    """Joins explanation lines, using vertical spacing gaps to preserve paragraph bounds and merge wrapped lines."""
+    if not lines_list:
+        return ""
+    
+    # Sort top-to-bottom, left-to-right
+    lines_sorted = sorted(lines_list, key=lambda l: (l['y'], l['x']))
+    
+    # Calculate vertical gaps to estimate typical line spacing
+    gaps = []
     for i in range(1, len(lines_sorted)):
         prev = lines_sorted[i-1]
         curr = lines_sorted[i]
-        
         gap = curr['y'] - (prev['y'] + prev['h'])
-        if gap >= 0.003:
-            text_parts.append("\n" + curr['text'].strip())
-        else:
-            text_parts.append(curr['text'].strip())
+        if gap > 0:
+            gaps.append(gap)
             
-    result = ""
-    for part in text_parts:
-        if not result:
-            result = part
-        elif part.startswith('\n'):
-            result += part
+    typical_gap = 0.008
+    if gaps:
+        gaps.sort()
+        typical_gap = max(0.004, gaps[len(gaps) // 2])
+        
+    result = []
+    current_para = []
+    
+    for i, line in enumerate(lines_sorted):
+        text = line['text'].strip()
+        if not text:
+            continue
+            
+        if i == 0:
+            current_para.append(text)
+            continue
+            
+        prev_line = lines_sorted[i-1]
+        prev_text = prev_line['text'].strip()
+        gap = line['y'] - (prev_line['y'] + prev_line['h'])
+        
+        # Check if the previous line ends with a sentence-ending punctuation.
+        ends_with_punct = bool(re.search(r'[.!?:”"»]\s*$', prev_text))
+        
+        is_para_break = False
+        if ends_with_punct:
+            # Paragraph breaks typically have a larger gap than normal line spacing
+            if gap >= 1.4 * typical_gap or gap >= 0.015:
+                is_para_break = True
+                
+        if is_para_break:
+            result.append(" ".join(current_para))
+            current_para = [text]
         else:
-            result += " " + part
-    return result
+            current_para.append(text)
+            
+    if current_para:
+        result.append(" ".join(current_para))
+        
+    return "\n".join(result)
+
+
+def auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False):
+    """
+    Given a list of page indices in a batch, automatically concatenates 
+    each page's orphan_explanation to the last entry's explanation of the previous page
+    if that previous page exists and has entries.
+    """
+    sorted_indices = sorted(page_indices)
+    for idx in sorted_indices:
+        if idx > 0:
+            state_key = (pdf_name, idx)
+            prev_state_key = (pdf_name, idx - 1)
+            
+            if state_key in PAGE_STATES and prev_state_key in PAGE_STATES:
+                state = PAGE_STATES[state_key]
+                prev_state = PAGE_STATES[prev_state_key]
+                
+                orphan_txt = state.get('orphan_explanation', '').strip()
+                if orphan_txt and prev_state.get('entries'):
+                    last_entry = prev_state['entries'][-1]
+                    
+                    # Store raw unconcatenated text to prevent repeated appends
+                    raw_prev_exp = last_entry.get('explanation_original_raw', last_entry.get('explanation_original', '')).strip()
+                    if 'explanation_original_raw' not in last_entry:
+                        last_entry['explanation_original_raw'] = raw_prev_exp
+                        
+                    joined_original = raw_prev_exp + " " + orphan_txt if raw_prev_exp else orphan_txt
+                    last_entry['explanation_original'] = joined_original
+                    
+                    # Update explanation_corrected if forced or if it wasn't edited
+                    if force_overwrite or not last_entry.get('explanation_corrected') or last_entry['explanation_corrected'].strip() == raw_prev_exp:
+                        last_entry['explanation_corrected'] = joined_original
+                        
+                    # Maintain pages_sourced array on the entry
+                    prev_page_num = prev_state['page_num']
+                    curr_page_num = state['page_num']
+                    
+                    pages_set = set(last_entry.get('pages_sourced', [prev_page_num]))
+                    pages_set.add(curr_page_num)
+                    last_entry['pages_sourced'] = sorted(list(pages_set))
 
 
 # --- ROUTES ---
@@ -352,15 +529,6 @@ def load_pages():
         # If page already has state in session
         if state_key in PAGE_STATES:
             state = PAGE_STATES[state_key]
-            pages.append({
-                'page_idx': state['page_idx'],
-                'page_num': state['page_num'],
-                'stitch_poem': state.get('stitch_poem', False),
-                'stitch_explanation': state.get('stitch_explanation', False),
-                'orphan_explanation': state.get('orphan_explanation', ''),
-                'orphan_box': state.get('orphan_box', None),
-                'entries': state.get('entries', [])
-            })
         else:
             cache_key = (pdf_name, idx)
             if cache_key in OCR_CACHE:
@@ -386,18 +554,27 @@ def load_pages():
             
             PAGE_STATES[state_key] = initial_state
             
-            pages.append({
-                'page_idx': idx,
-                'page_num': idx + 1,
-                'stitch_poem': False,
-                'stitch_explanation': not has_cat,
-                'orphan_explanation': orphan_text,
-                'orphan_box': orphan_box,
-                'entries': entries
-            })
-            
     doc.close()
-    return jsonify({'pages': pages})
+    
+    # Run auto-concatenation across the loaded pages in the batch!
+    auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False)
+    
+    # Rebuild returned pages to include the auto-concatenated fields
+    final_pages = []
+    for idx in page_indices:
+        state_key = (pdf_name, idx)
+        state = PAGE_STATES[state_key]
+        final_pages.append({
+            'page_idx': state['page_idx'],
+            'page_num': state['page_num'],
+            'stitch_poem': state.get('stitch_poem', False),
+            'stitch_explanation': state.get('stitch_explanation', False),
+            'orphan_explanation': state.get('orphan_explanation', ''),
+            'orphan_box': state.get('orphan_box', None),
+            'entries': state.get('entries', [])
+        })
+        
+    return jsonify({'pages': final_pages})
 
 @app.route('/api/process_batch', methods=['POST'])
 def process_batch():
@@ -414,7 +591,7 @@ def process_batch():
         
     processed_pages = []
     
-    # 1. Update session PAGE_STATES with the user's adjusted boxes and stitch flags
+    # 1. Update session PAGE_STATES with the user's adjusted boxes
     for p_data in pages_data:
         page_idx = int(p_data.get('page_idx'))
         state_key = (pdf_name, page_idx)
@@ -422,8 +599,6 @@ def process_batch():
         if state_key in PAGE_STATES:
             PAGE_STATES[state_key]['entries'] = p_data.get('entries', [])
             PAGE_STATES[state_key]['orphan_box'] = p_data.get('orphan_box')
-            PAGE_STATES[state_key]['stitch_poem'] = p_data.get('stitch_poem', False)
-            PAGE_STATES[state_key]['stitch_explanation'] = p_data.get('stitch_explanation', False)
             
     # 2. Extract raw text from final boxes for all pages in this batch
     for p_data in pages_data:
@@ -471,13 +646,14 @@ def process_batch():
                 elif in_box(cx, cy, exp_box):
                     e_lines.append(line)
                     
-            poem_orig = "\n".join(l['text'].strip() for l in sorted(p_lines, key=lambda l: (l['y'], l['x'])))
+            poem_orig = join_poem_lines(p_lines)
             category = " ".join(l['text'].strip() for l in sorted(c_lines, key=lambda l: (l['y'], l['x'])))
             explanation_orig = join_explanation_lines_with_spacing(e_lines)
             
             entry['poem_original'] = poem_orig
             entry['category'] = category
             entry['explanation_original'] = explanation_orig
+            entry['explanation_original_raw'] = explanation_orig
             
             # Store directly in the corrected/edited properties
             entry['poem_corrected'] = poem_orig
@@ -513,6 +689,10 @@ def process_batch():
                     o_lines.append(line)
                     
         state['orphan_explanation'] = join_explanation_lines_with_spacing(o_lines)
+
+    # 2.5 Run auto-concatenation on the processed batch
+    batch_page_indices = [int(p['page_idx']) for p in pages_data]
+    auto_concatenate_batch(pdf_name, batch_page_indices, force_overwrite=True)
 
     # 3. Save extracted raw text data of all pages to a local JSON file inside the extractions folder
     json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poem-extraction-data.json")
@@ -605,7 +785,7 @@ def extract_text():
             elif in_box(cx, cy, exp_box):
                 e_lines.append(line)
                 
-        poem_orig = "\n".join(l['text'].strip() for l in sorted(p_lines, key=lambda l: (l['y'], l['x'])))
+        poem_orig = join_poem_lines(p_lines)
         category = " ".join(l['text'].strip() for l in sorted(c_lines, key=lambda l: (l['y'], l['x'])))
         explanation_orig = join_explanation_lines_with_spacing(e_lines)
         
@@ -728,67 +908,26 @@ def save_csv():
         entries = page.get('entries', [])
         orphan = page.get('orphan_explanation', '').strip()
         
-        # 1. Handle page-level stitching (stitching orphan text to the last entry's explanation)
-        if page.get('stitch_explanation', False) or (not page.get('stitch_poem', False) and orphan):
-            if final_entries:
-                if orphan:
-                    if final_entries[-1]['explanation']:
-                        final_entries[-1]['explanation'] += " " + orphan
-                    else:
-                        final_entries[-1]['explanation'] = orphan
-                if page_num not in final_entries[-1]['pages_sourced']:
-                    final_entries[-1]['pages_sourced'].append(page_num)
-            else:
-                if orphan:
-                    final_entries.append({
-                        'poem': '',
-                        'category': '',
-                        'explanation': orphan,
-                        'pages_sourced': [page_num]
-                    })
-        elif page.get('stitch_poem', False):
-            if final_entries:
-                poem_to_stitch = orphan if orphan else (entries[0]['poem_corrected'] if entries else '')
-                if poem_to_stitch:
-                    if final_entries[-1]['poem']:
-                        final_entries[-1]['poem'] += "\n" + poem_to_stitch
-                    else:
-                        final_entries[-1]['poem'] = poem_to_stitch
-                if page_num not in final_entries[-1]['pages_sourced']:
-                    final_entries[-1]['pages_sourced'].append(page_num)
-            else:
-                poem_to_stitch = orphan if orphan else (entries[0]['poem_corrected'] if entries else '')
-                final_entries.append({
-                    'poem': poem_to_stitch,
-                    'category': '',
-                    'explanation': '',
-                    'pages_sourced': [page_num]
-                })
-                
-        # 2. Add new entries from this page
-        start_entry_idx = 0
-        if page.get('stitch_poem', False) and not orphan and entries:
-            if final_entries:
-                first_entry = entries[0]
-                if first_entry.get('category'):
-                    final_entries[-1]['category'] = first_entry['category']
-                if first_entry.get('explanation_corrected'):
-                    if final_entries[-1]['explanation']:
-                        final_entries[-1]['explanation'] += " " + first_entry['explanation_corrected']
-                    else:
-                        final_entries[-1]['explanation'] = first_entry['explanation_corrected']
-            start_entry_idx = 1
+        # If there is orphan explanation and no entries yet, create an orphan entry row
+        if orphan and not final_entries:
+            final_entries.append({
+                'poem': '',
+                'category': '',
+                'explanation': orphan,
+                'pages_sourced': [page_num]
+            })
             
-        for entry in entries[start_entry_idx:]:
+        for entry in entries:
             poem_val = entry.get('poem_corrected', '').strip()
             cat_val = entry.get('category', '').strip()
             exp_val = entry.get('explanation_corrected', '').strip()
+            pages_list = entry.get('pages_sourced', [page_num])
             
             final_entries.append({
                 'poem': poem_val,
                 'category': cat_val,
                 'explanation': exp_val,
-                'pages_sourced': [page_num]
+                'pages_sourced': pages_list
             })
 
     filename = "poem-extraction.csv"
@@ -840,4 +979,4 @@ def save_csv():
 
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    app.run(host='127.0.0.1', port=5001, debug=True)
