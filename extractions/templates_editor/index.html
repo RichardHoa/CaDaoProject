@@ -412,6 +412,31 @@
             transform: translateY(0);
             opacity: 1;
         }
+
+        /* Gap Visualization Indicators */
+        .gap-indicator-line {
+            position: absolute;
+            width: 0;
+            border-left: 2px dashed rgba(236, 72, 153, 0.7); /* Pinkish dashed line */
+            z-index: 4;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .gap-indicator-badge {
+            background: #db2777; /* Magenta/dark pink background */
+            color: white;
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 10px;
+            white-space: nowrap;
+            pointer-events: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            transform: translateX(-50%);
+        }
     </style>
 </head>
 <body>
@@ -890,6 +915,90 @@
                 let label = 'Chú thích (Nối tiếp)';
                 createDraggableOrphanBox(pageIdx, viewport, page.orphan_box, label, boxClass);
             }
+            
+            // Draw gap indicators
+            renderGapIndicators(pageIdx, viewport);
+        }
+
+        // Calculate and draw gap indicators in the viewport
+        function renderGapIndicators(pageIdx, viewport) {
+            // Remove existing ones first
+            viewport.querySelectorAll('.gap-indicator-line').forEach(el => el.remove());
+            
+            const page = batchPages[pageIdx];
+            if (!page || !page.entries) return;
+            
+            const activeBoxes = [];
+            
+            page.entries.forEach((entry, entryIdx) => {
+                if (entry.boxes.poem) {
+                    activeBoxes.push({
+                        type: 'poem',
+                        entryIdx: entryIdx,
+                        box: entry.boxes.poem,
+                        label: `Bài thơ [${entryIdx + 1}]`
+                    });
+                }
+                if (entry.boxes.category) {
+                    activeBoxes.push({
+                        type: 'category',
+                        entryIdx: entryIdx,
+                        box: entry.boxes.category,
+                        label: `Phân loại [${entryIdx + 1}]`
+                    });
+                }
+                if (entry.boxes.explanation) {
+                    activeBoxes.push({
+                        type: 'explanation',
+                        entryIdx: entryIdx,
+                        box: entry.boxes.explanation,
+                        label: `Chú thích [${entryIdx + 1}]`
+                    });
+                }
+            });
+            
+            if (page.orphan_box) {
+                activeBoxes.push({
+                    type: 'orphan',
+                    entryIdx: null,
+                    box: page.orphan_box,
+                    label: 'Chú thích (Nối tiếp)'
+                });
+            }
+            
+            // Sort boxes by their top coordinate (y)
+            activeBoxes.sort((a, b) => a.box.y - b.box.y);
+            
+            // Draw gaps between consecutive boxes
+            for (let i = 0; i < activeBoxes.length - 1; i++) {
+                const b1 = activeBoxes[i];
+                const b2 = activeBoxes[i + 1];
+                
+                const bottom1 = b1.box.y + b1.box.h;
+                const top2 = b2.box.y;
+                const gap = top2 - bottom1;
+                
+                if (gap > 0.001) { // Only draw positive gaps
+                    // Draw vertical line at the midpoint of their X centers
+                    const cx1 = b1.box.x + b1.box.w / 2;
+                    const cx2 = b2.box.x + b2.box.w / 2;
+                    const centerX = (cx1 + cx2) / 2;
+                    
+                    const line = document.createElement('div');
+                    line.className = 'gap-indicator-line';
+                    line.style.left = `${centerX * 100}%`;
+                    line.style.top = `${bottom1 * 100}%`;
+                    line.style.height = `${gap * 100}%`;
+                    
+                    const badge = document.createElement('div');
+                    badge.className = 'gap-indicator-badge';
+                    badge.textContent = `${gap.toFixed(3)}`;
+                    
+                    line.title = `Khoảng cách giữa ${b1.label} và ${b2.label}: ${gap.toFixed(4)}`;
+                    line.appendChild(badge);
+                    viewport.appendChild(line);
+                }
+            }
         }
 
         // Toggle a box's visibility/existence for an entry
@@ -982,6 +1091,8 @@
                     
                     batchPages[pageIdx].entries[entryIdx].boxes[type].h = newHeight / 100.0;
                 }
+                
+                renderGapIndicators(pageIdx, container);
             });
             
             document.addEventListener('mouseup', () => {
@@ -1073,6 +1184,8 @@
                     batchPages[pageIdx].orphan_box.w = startWidth / 100.0;
                     batchPages[pageIdx].orphan_box.h = newHeight / 100.0;
                 }
+                
+                renderGapIndicators(pageIdx, container);
             });
             
             document.addEventListener('mouseup', () => {

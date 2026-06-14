@@ -75,4 +75,4 @@ Visit `http://localhost:4000` to start exploring.
 fuser -k 4000/tcp
 ---
 
-> "Ca dao là tiếng lòng của dân tộc." — Let's keep that heart beating in the digital age.
+python3 step2_improved.py --pdf 1-split.pdf --start-page 7 --end-page 100
