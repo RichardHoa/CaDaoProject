@@ -6,6 +6,7 @@ import json as py_json
 import cv2
 import numpy as np
 import tempfile
+import argparse
 from flask import Flask, request, jsonify, render_template, send_file
 import fitz  # PyMuPDF
 import objc
@@ -27,6 +28,82 @@ OCR_CACHE = {}
 # Session dictionary to save user page states (boxes, text, stitching markers, OCR lines)
 # Keyed by (pdf_name, page_idx)
 PAGE_STATES = {}
+
+def load_json_data():
+    """Loads PAGE_STATES from poem-extraction-data.json if it exists."""
+    global PAGE_STATES
+    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poem-extraction-data.json")
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                json_data = py_json.load(f)
+            for item in json_data:
+                pdf = item['pdf']
+                page_idx = item['page_idx']
+                state_key = (pdf, page_idx)
+                
+                # Reconstruct entries
+                entries = []
+                for e in item.get('entries', []):
+                    entries.append({
+                        'entry_idx': e['entry_idx'],
+                        'boxes': {
+                            'poem': None,
+                            'category': None,
+                            'explanation': None
+                        },
+                        'category': e.get('category', ''),
+                        'poem_original': e.get('poem_original', ''),
+                        'poem_corrected': e.get('poem_original', ''),
+                        'explanation_original': e.get('explanation_original', ''),
+                        'explanation_corrected': e.get('explanation_original', '')
+                    })
+                
+                PAGE_STATES[state_key] = {
+                    'page_idx': page_idx,
+                    'page_num': item.get('page_num', page_idx + 1),
+                    'stitch_poem': item.get('stitch_poem', False),
+                    'stitch_explanation': item.get('stitch_explanation', False),
+                    'orphan_explanation': item.get('orphan_explanation', ''),
+                    'orphan_box': None,
+                    'entries': entries
+                }
+            print(f"Loaded {len(json_data)} page states from {json_path}")
+        except Exception as e:
+            print(f"Warning: Failed to load existing page states: {e}")
+
+def save_json_data():
+    """Saves raw text data of all PAGE_STATES to a local JSON file."""
+    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poem-extraction-data.json")
+    try:
+        json_data = []
+        sorted_keys = sorted(PAGE_STATES.keys(), key=lambda k: (k[0], k[1]))
+        for k in sorted_keys:
+            st = PAGE_STATES[k]
+            json_data.append({
+                'pdf': k[0],
+                'page_idx': st['page_idx'],
+                'page_num': st['page_num'],
+                'stitch_poem': st.get('stitch_poem', False),
+                'stitch_explanation': st.get('stitch_explanation', False),
+                'orphan_explanation': st.get('orphan_explanation', ''),
+                'entries': [
+                    {
+                        'entry_idx': e['entry_idx'],
+                        'category': e.get('category', ''),
+                        'poem_original': e.get('poem_original', ''),
+                        'explanation_original': e.get('explanation_original', '')
+                    } for e in st.get('entries', [])
+                ]
+            })
+        with open(json_path, 'w', encoding='utf-8') as f:
+            py_json.dump(json_data, f, ensure_ascii=False, indent=2)
+        print(f"Saved raw text data to {json_path}")
+    except Exception as e:
+        print(f"Error saving JSON file: {e}")
+
+# Load any existing page states at startup
+load_json_data()
 
 def is_category(text):
     """Checks if a text line represents a category anchor."""
@@ -228,6 +305,14 @@ def get_initial_boxes(lines):
                         break
                 if first_alpha and first_alpha.islower():
                     break
+                    
+                # Heuristic stop 3: Capitalized line vertical distance check
+                # If the line starts with an uppercase letter but the vertical gap to the poem below it
+                # is larger than a standard poem line spacing, we treat it as too far (likely explanation).
+                if first_alpha and first_alpha.isupper():
+                    MAX_POEM_LINE_GAP = 0.009  # Threshold for vertical gap to prior line
+                    if gap >= MAX_POEM_LINE_GAP:
+                        break
                 
             poem_start = i
             
@@ -695,33 +780,7 @@ def process_batch():
     auto_concatenate_batch(pdf_name, batch_page_indices, force_overwrite=True)
 
     # 3. Save extracted raw text data of all pages to a local JSON file inside the extractions folder
-    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poem-extraction-data.json")
-    try:
-        json_data = []
-        sorted_keys = sorted(PAGE_STATES.keys(), key=lambda k: (k[0], k[1]))
-        for k in sorted_keys:
-            st = PAGE_STATES[k]
-            json_data.append({
-                'pdf': k[0],
-                'page_idx': st['page_idx'],
-                'page_num': st['page_num'],
-                'stitch_poem': st.get('stitch_poem', False),
-                'stitch_explanation': st.get('stitch_explanation', False),
-                'orphan_explanation': st.get('orphan_explanation', ''),
-                'entries': [
-                    {
-                        'entry_idx': e['entry_idx'],
-                        'category': e.get('category', ''),
-                        'poem_original': e.get('poem_original', ''),
-                        'explanation_original': e.get('explanation_original', '')
-                    } for e in st.get('entries', [])
-                ]
-            })
-        with open(json_path, 'w', encoding='utf-8') as f:
-            py_json.dump(json_data, f, ensure_ascii=False, indent=2)
-        print(f"Saved raw text data to {json_path}")
-    except Exception as e:
-        print(f"Error saving JSON file: {e}")
+    save_json_data()
         
     # 4. Return pages data
     for p_data in pages_data:
@@ -850,19 +909,11 @@ def reset_boxes():
         'orphan_box': orphan_box
     })
 
-@app.route('/api/save_csv', methods=['POST'])
-def save_csv():
+def save_csv_internal(pdf_name, page_indices):
     """Assembles all reviewed/cached page states, connects entries using stitching flags, and saves CSV."""
-    data = request.json
-    pdf_name = data.get('pdf')
-    page_indices = data.get('page_indices', [])
-    
-    if not pdf_name:
-        return jsonify({'error': 'Missing PDF name'}), 400
-        
     pdf_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), pdf_name)
     if not os.path.exists(pdf_path):
-        return jsonify({'error': 'PDF not found'}), 404
+        raise FileNotFoundError(f"PDF not found: {pdf_path}")
         
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
@@ -933,50 +984,142 @@ def save_csv():
     filename = "poem-extraction.csv"
     csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
     
-    try:
-        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['poem', 'category', 'explanation', 'pages'])
-            writer.writeheader()
-            for entry in final_entries:
-                poem_val = entry['poem'].strip()
-                cat_val = entry['category'].strip()
-                exp_val = entry['explanation'].strip()
-                pages_str = ",".join(str(p) for p in entry['pages_sourced'])
-                
-                if not poem_val and not cat_val and not exp_val:
-                    continue
-                    
-                writer.writerow({
-                    'poem': poem_val,
-                    'category': cat_val,
-                    'explanation': exp_val,
-                    'pages': pages_str
-                })
-                
-        # Save progress tracker to user-progress.json
-        progress_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user-progress.json")
-        progress_data = {}
-        if os.path.exists(progress_path):
-            try:
-                with open(progress_path, 'r', encoding='utf-8') as pf:
-                    progress_data = py_json.load(pf)
-            except Exception:
-                pass
-                
-        last_page_idx = max(page_indices)
-        progress_data[pdf_name] = {
-            'last_processed_page': last_page_idx + 1,
-            'page_indices': page_indices
-        }
-        
-        with open(progress_path, 'w', encoding='utf-8') as pf:
-            py_json.dump(progress_data, pf, ensure_ascii=False, indent=2)
+    with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=['poem', 'category', 'explanation', 'pages'])
+        writer.writeheader()
+        for entry in final_entries:
+            poem_val = entry['poem'].strip()
+            cat_val = entry['category'].strip()
+            exp_val = entry['explanation'].strip()
+            pages_str = ",".join(str(p) for p in entry['pages_sourced'])
             
+            if not poem_val and not cat_val and not exp_val:
+                continue
+                
+            writer.writerow({
+                'poem': poem_val,
+                'category': cat_val,
+                'explanation': exp_val,
+                'pages': pages_str
+            })
+            
+    # Save progress tracker to user-progress.json
+    progress_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user-progress.json")
+    progress_data = {}
+    if os.path.exists(progress_path):
+        try:
+            with open(progress_path, 'r', encoding='utf-8') as pf:
+                progress_data = py_json.load(pf)
+        except Exception:
+            pass
+            
+    last_page_idx = max(page_indices)
+    progress_data[pdf_name] = {
+        'last_processed_page': last_page_idx + 1,
+        'page_indices': page_indices
+    }
+    
+    with open(progress_path, 'w', encoding='utf-8') as pf:
+        py_json.dump(progress_data, pf, ensure_ascii=False, indent=2)
+        
+    return filename
+
+
+@app.route('/api/save_csv', methods=['POST'])
+def save_csv():
+    """Assembles all reviewed/cached page states, connects entries using stitching flags, and saves CSV."""
+    data = request.json
+    pdf_name = data.get('pdf')
+    page_indices = data.get('page_indices', [])
+    
+    if not pdf_name:
+        return jsonify({'error': 'Missing PDF name'}), 400
+        
+    try:
+        filename = save_csv_internal(pdf_name, page_indices)
         return jsonify({'success': True, 'filename': filename})
     except Exception as e:
         print(f"Error exporting CSV: {e}")
         return jsonify({'error': str(e)}), 500
 
 
+def run_continuous_extraction(pdf_name, start_page=1, end_page=None):
+    """Runs OCR and stitching continuously on the specified page range, and saves output directly."""
+    print(f"Starting continuous extraction for {pdf_name}...")
+    pdf_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), pdf_name)
+    if not os.path.exists(pdf_path):
+        print(f"Error: PDF file not found at {pdf_path}")
+        return
+        
+    doc = fitz.open(pdf_path)
+    total_pages = len(doc)
+    print(f"PDF loaded successfully. Total pages: {total_pages}")
+    
+    if start_page < 1 or start_page > total_pages:
+        print(f"Error: start_page {start_page} out of bounds (1-{total_pages})")
+        doc.close()
+        return
+        
+    if end_page is None:
+        end_page = total_pages
+    elif end_page < start_page or end_page > total_pages:
+        print(f"Error: end_page {end_page} out of bounds ({start_page}-{total_pages})")
+        doc.close()
+        return
+        
+    print(f"Processing pages {start_page} to {end_page}...")
+    page_indices = list(range(start_page - 1, end_page))
+    
+    # Process each page
+    for idx in page_indices:
+        print(f"[{idx + 1}/{total_pages}] Processing page...")
+        page = doc[idx]
+        
+        # Run OCR
+        lines = run_apple_ocr(page, idx)
+        OCR_CACHE[(pdf_name, idx)] = lines
+        
+        # Calculate initial layout boxes
+        entries, orphan_text, orphan_box = get_initial_boxes(lines)
+        has_cat = len(entries) > 0
+        
+        # Save to PAGE_STATES
+        state_key = (pdf_name, idx)
+        PAGE_STATES[state_key] = {
+            'page_idx': idx,
+            'page_num': idx + 1,
+            'stitch_poem': False,
+            'stitch_explanation': not has_cat,
+            'orphan_explanation': orphan_text,
+            'orphan_box': orphan_box,
+            'entries': entries,
+            'lines': lines
+        }
+        
+    doc.close()
+    
+    print("Running auto-concatenation...")
+    auto_concatenate_batch(pdf_name, page_indices, force_overwrite=True)
+    
+    print("Saving text data to JSON...")
+    save_json_data()
+    
+    print("Saving CSV output...")
+    try:
+        csv_filename = save_csv_internal(pdf_name, page_indices)
+        print(f"Successfully finished extraction! Output saved to: {csv_filename}")
+    except Exception as e:
+        print(f"Error saving CSV: {e}")
+
+
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5001, debug=True)
+    parser = argparse.ArgumentParser(description="CaDao Extraction Suite CLI / Server")
+    parser.add_argument('--pdf', type=str, help="PDF filename to process (e.g., 1-split.pdf)")
+    parser.add_argument('--start-page', type=int, default=1, help="Start page (1-indexed)")
+    parser.add_argument('--end-page', type=int, help="End page (1-indexed, inclusive)")
+    args = parser.parse_args()
+    
+    if args.pdf:
+        run_continuous_extraction(args.pdf, args.start_page, args.end_page)
+    else:
+        app.run(host='127.0.0.1', port=5001, debug=True)

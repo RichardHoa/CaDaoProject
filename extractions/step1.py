@@ -2,6 +2,17 @@ import os
 import cv2
 import fitz  # PyMuPDF
 import numpy as np
+import re
+import tempfile
+import objc
+from Foundation import NSURL
+
+# Load macOS Vision framework via PyObjC
+try:
+    objc.loadBundle('Vision', bundle_path='/System/Library/Frameworks/Vision.framework', module_globals=globals())
+except Exception as e:
+    print(f"Error: Failed to load macOS Vision framework: {e}")
+
 
 def detect_column_separator(image, binary):
     """
@@ -125,6 +136,70 @@ def detect_header_page_number_and_icon(image, binary):
     
     return (xmin, ymin, xmax - xmin, ymax - ymin)
 
+def run_ocr_on_crop(crop):
+    if 'VNImageRequestHandler' not in globals():
+        return None
+    temp_dir = os.path.dirname(os.path.abspath(__file__))
+    for scale in [3.0, 2.0]:
+        crop_resized = cv2.resize(crop, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        with tempfile.NamedTemporaryFile(suffix=".png", dir=temp_dir, delete=False) as temp_file:
+            temp_img_path = temp_file.name
+        try:
+            cv2.imwrite(temp_img_path, crop_resized)
+            url = NSURL.fileURLWithPath_(temp_img_path)
+            handler = VNImageRequestHandler.alloc().initWithURL_options_(url, None)
+            request = VNRecognizeTextRequest.alloc().init()
+            request.setRecognitionLanguages_(["en-US"])
+            request.setUsesLanguageCorrection_(False)
+            success = handler.performRequests_error_([request], None)
+            if success:
+                results = request.results()
+                for obs in results:
+                    candidates = obs.topCandidates_(1)
+                    if candidates:
+                        text = candidates[0].string()
+                        digits = re.findall(r'\d+', text)
+                        if digits:
+                            return int(digits[-1])
+        except Exception as e:
+            print(f"Error during OCR: {e}")
+        finally:
+            if os.path.exists(temp_img_path):
+                try:
+                    os.remove(temp_img_path)
+                except Exception:
+                    pass
+    return None
+
+def extract_page_number(image, header_box):
+    """
+    Extracts the printed page number. First tries OCR on the detected header box.
+    If that fails or header_box is None, runs OCR on the top-left and top-right corners.
+    """
+    # 1. Try OCR on header_box if it exists
+    if header_box:
+        hx, hy, hw, hh = header_box
+        crop = image[hy:hy+hh, hx:hx+hw]
+        val = run_ocr_on_crop(crop)
+        if val is not None:
+            return val
+            
+    # 2. Try OCR on top-left and top-right corners of the page (checking both sides)
+    height, width = image.shape[:2]
+    top_limit = int(height * 0.12)
+    if top_limit < 100:
+        top_limit = 100
+        
+    left_crop = image[0:top_limit, 0:int(width * 0.25)]
+    right_crop = image[0:top_limit, int(width * 0.75):width]
+    
+    for crop in [left_crop, right_crop]:
+        val = run_ocr_on_crop(crop)
+        if val is not None:
+            return val
+            
+    return None
+
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     pdf_path = os.path.join(script_dir, "2.pdf")
@@ -132,16 +207,15 @@ def main():
     output_dir = os.path.join(script_dir, "debug_output")
     os.makedirs(output_dir, exist_ok=True)
     
-    print(f"Opening source PDF: {pdf_path}")
     doc = fitz.open(pdf_path)
     
     # Create the output PDF in memory
     out_doc = fitz.open()
     
-    start_page = 4
-    # end_page = min(20, len(doc))
-    end_page = len(doc)
-    print(f"Processing pages {start_page + 1} to {end_page}...")
+    start_page = 5
+    end_page = 862
+    
+    last_valid_page_number = None
     
     for idx in range(start_page, end_page):
         page_num = idx + 1
@@ -174,6 +248,12 @@ def main():
         # 3. Detect Page Number & Brand Icon (Blue in debug image)
         header_box = detect_header_page_number_and_icon(image, binary)
         
+        # Extract printed page number from header (checking both header_box and corners)
+        printed_page_num = extract_page_number(image, header_box)
+        
+        # Log the printed page number
+        print(f"Page {page_num} (header number: {printed_page_num})")
+            
         # --- PDF Modification (Redactions) ---
         # Add redactions directly on the page in-memory
         has_redactions = False
@@ -231,15 +311,11 @@ def main():
         out_img_path = os.path.join(output_dir, f"page_{page_num}_layout.png")
         cv2.imwrite(out_img_path, annotated_image)
         
-        print(f"Page {page_num}: Separator at x={x_sep:.1f}px ({x_sep_pt:.1f}pt), letter_box={letter_box is not None}, header={header_box is not None}")
+        x_sep_pt = x_sep / zoom
         
-    # Save the output PDF
-    print(f"Saving output PDF to: {output_pdf_path}")
     out_doc.save(output_pdf_path, garbage=4, deflate=True)
     out_doc.close()
     doc.close()
-    
-    print("Processing successfully completed!")
 
 if __name__ == "__main__":
     main()
