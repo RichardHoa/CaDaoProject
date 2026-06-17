@@ -29,85 +29,11 @@ OCR_CACHE = {}
 # Keyed by (pdf_name, page_idx)
 PAGE_STATES = {}
 
-def load_json_data():
-    """Loads PAGE_STATES from poem-extraction-data.json if it exists."""
-    global PAGE_STATES
-    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poem-extraction-data.json")
-    if os.path.exists(json_path):
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                json_data = py_json.load(f)
-            for item in json_data:
-                pdf = item['pdf']
-                page_idx = item['page_idx']
-                state_key = (pdf, page_idx)
-                
-                # Reconstruct entries
-                entries = []
-                for e in item.get('entries', []):
-                    entries.append({
-                        'entry_idx': e['entry_idx'],
-                        'boxes': {
-                            'poem': None,
-                            'category': None,
-                            'explanation': None
-                        },
-                        'category': e.get('category', ''),
-                        'poem_original': e.get('poem_original', ''),
-                        'poem_corrected': e.get('poem_original', ''),
-                        'explanation_original': e.get('explanation_original', ''),
-                        'explanation_corrected': e.get('explanation_original', '')
-                    })
-                
-                PAGE_STATES[state_key] = {
-                    'page_idx': page_idx,
-                    'page_num': item.get('page_num', page_idx + 1),
-                    'stitch_poem': item.get('stitch_poem', False),
-                    'stitch_explanation': item.get('stitch_explanation', False),
-                    'orphan_explanation': item.get('orphan_explanation', ''),
-                    'orphan_box': None,
-                    'entries': entries
-                }
-            print(f"Loaded {len(json_data)} page states from {json_path}")
-        except Exception as e:
-            print(f"Warning: Failed to load existing page states: {e}")
-
-def save_json_data():
-    """Saves raw text data of all PAGE_STATES to a local JSON file."""
-    json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poem-extraction-data.json")
-    try:
-        json_data = []
-        sorted_keys = sorted(PAGE_STATES.keys(), key=lambda k: (k[0], k[1]))
-        for k in sorted_keys:
-            st = PAGE_STATES[k]
-            json_data.append({
-                'pdf': k[0],
-                'page_idx': st['page_idx'],
-                'page_num': st['page_num'],
-                'stitch_poem': st.get('stitch_poem', False),
-                'stitch_explanation': st.get('stitch_explanation', False),
-                'orphan_explanation': st.get('orphan_explanation', ''),
-                'entries': [
-                    {
-                        'entry_idx': e['entry_idx'],
-                        'category': e.get('category', ''),
-                        'poem_original': e.get('poem_original', ''),
-                        'explanation_original': e.get('explanation_original', '')
-                    } for e in st.get('entries', [])
-                ]
-            })
-        with open(json_path, 'w', encoding='utf-8') as f:
-            py_json.dump(json_data, f, ensure_ascii=False, indent=2)
-        print(f"Saved raw text data to {json_path}")
-    except Exception as e:
-        print(f"Error saving JSON file: {e}")
-
-# Load any existing page states at startup
-load_json_data()
+# (In-memory PAGE_STATES state only; persistent JSON loading/saving has been removed)
 
 def is_category(text):
     """Checks if a text line represents a category anchor."""
-    text_clean = text.strip()
+    text_clean = text.strip(" \t\n\r\"'“”‘’«»:.-")
     match = re.match(r'^\(([^)]+)\)', text_clean)
     if match:
         content = match.group(1).strip()
@@ -218,7 +144,7 @@ def run_apple_ocr(page, page_idx):
                 text = candidates[0].string() if candidates else ""
                 
                 # Split inline categories if present (e.g. (CA DAO) Chi tiết...)
-                text_clean = text.strip()
+                text_clean = text.strip(" \t\n\r\"'“”‘’«»")
                 match = re.match(r'^\(([^)]+)\)', text_clean)
                 if match:
                     content = match.group(1).strip()
@@ -295,23 +221,33 @@ def get_initial_boxes(lines):
                 # Heuristic stop 1: Vertical Gap (gap >= 0.012)
                 gap = lines[i+1]['y'] - (lines[i]['y'] + lines[i]['h'])
                 if gap >= 0.012:
+                    print(f"[Stop Criteria 1] Vertical Gap: {gap:.4f} >= 0.012 in poem (category: '{lines[cat_idx]['text']}' at index {cat_idx}). "
+                          f"Between upper line '{lines[i]['text']}' (y: {lines[i]['y']:.4f}, h: {lines[i]['h']:.4f}) and "
+                          f"lower line '{lines[i+1]['text']}' (y: {lines[i+1]['y']:.4f})")
                     break
                     
                 # Heuristic stop 2: Lowercase starting character
                 first_alpha = None
                 for char in line_text:
-                    if char.isalpha():
+                    if char.isalpha() and gap >= 0.003:
                         first_alpha = char
                         break
-                if first_alpha and first_alpha.islower():
+                if first_alpha and first_alpha.islower() and gap >= 0.003:
+                    print(f"[Stop Criteria 2] Lowercase starting char '{first_alpha}' with gap: {gap:.4f} >= 0.003 in poem (category: '{lines[cat_idx]['text']}' at index {cat_idx}). "
+                          f"Between upper line '{lines[i]['text']}' (y: {lines[i]['y']:.4f}, h: {lines[i]['h']:.4f}) and "
+                          f"lower line '{lines[i+1]['text']}' (y: {lines[i+1]['y']:.4f})")
                     break
                     
                 # Heuristic stop 3: Capitalized line vertical distance check
                 # If the line starts with an uppercase letter but the vertical gap to the poem below it
                 # is larger than a standard poem line spacing, we treat it as too far (likely explanation).
                 if first_alpha and first_alpha.isupper():
-                    MAX_POEM_LINE_GAP = 0.009  # Threshold for vertical gap to prior line
-                    if gap >= MAX_POEM_LINE_GAP:
+                    ends_with_punct = bool(re.search(r'[.!?:”"»)]\s*$', line_text))
+                    threshold = 0.005 if ends_with_punct else 0.0075
+                    if gap >= threshold:
+                        print(f"[Stop Criteria 3] Capitalized line vertical gap: {gap:.4f} >= {threshold} (ends_with_punct: {ends_with_punct}) in poem (category: '{lines[cat_idx]['text']}' at index {cat_idx}). "
+                              f"Between upper line '{lines[i]['text']}' (y: {lines[i]['y']:.4f}, h: {lines[i]['h']:.4f}) and "
+                              f"lower line '{lines[i+1]['text']}' (y: {lines[i+1]['y']:.4f})")
                         break
                 
             poem_start = i
@@ -368,6 +304,54 @@ def get_initial_boxes(lines):
     orphan_box = get_bbox_of_lines(orphan_lines) if orphan_lines else None
     return entries, orphan_text, orphan_box
 
+def clean_poem_text(text):
+    if not text:
+        return ""
+    
+    text = text.strip()
+    
+    # Clean only bullet-like symbols and noise at the very start
+    match = re.match(r'^([•◦▪▫●■*+~.\s]+)', text)
+    if match:
+        text = text[match.end():].lstrip()
+        
+    # Now, if it starts with a hyphen/dash, keep the '-' but remove any trailing symbols/spaces directly after the '-'
+    match_hyphen = re.match(r'^([-]+[•◦▪▫●■*+~.\s]*)', text)
+    if match_hyphen:
+        text = '-' + text[match_hyphen.end():].lstrip()
+        
+    # Apply to each line of the poem:
+    lines = []
+    for idx, line in enumerate(text.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        if idx > 0:
+            l_match = re.match(r'^([•◦▪▫●■*+~.\s]+)', line)
+            if l_match:
+                line = line[l_match.end():].lstrip()
+        lines.append(line)
+        
+    return "\n".join(lines).strip()
+
+
+def clean_explanation_text(text):
+    if not text:
+        return ""
+    # Remove any • symbols completely
+    text = text.replace('•', '')
+    # Strip leading/trailing spaces and bullets from lines
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        l_match = re.match(r'^([◦▪▫●■*+~.\s]+)', line)
+        if l_match:
+            line = line[l_match.end():].lstrip()
+        if line:
+            lines.append(line)
+    return "\n".join(lines).strip()
+
+
 def join_poem_lines(lines_list):
     """Joins poem lines, reconstructing verses that were wrapped due to page width."""
     if not lines_list:
@@ -388,9 +372,14 @@ def join_poem_lines(lines_list):
             current_verse.append(text)
             continue
             
-        # If the line starts with a lowercase letter, it is a continuation of the previous verse line
-        first_char = text[0] if text else ''
-        if first_char.islower():
+        # Find the first alphabetic character to determine if it is a lowercase continuation line
+        first_alpha = None
+        for char in text:
+            if char.isalpha():
+                first_alpha = char
+                break
+                
+        if first_alpha and first_alpha.islower():
             current_verse.append(text)
         else:
             result.append(" ".join(current_verse))
@@ -399,7 +388,8 @@ def join_poem_lines(lines_list):
     if current_verse:
         result.append(" ".join(current_verse))
         
-    return "\n".join(result)
+    joined = "\n".join(result)
+    return clean_poem_text(joined)
 
 
 def join_explanation_lines_with_spacing(lines_list):
@@ -458,7 +448,8 @@ def join_explanation_lines_with_spacing(lines_list):
     if current_para:
         result.append(" ".join(current_para))
         
-    return "\n".join(result)
+    joined = "\n".join(result)
+    return clean_explanation_text(joined)
 
 
 def auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False):
@@ -551,19 +542,8 @@ def get_progress():
     pdf_name = request.args.get('pdf')
     if not pdf_name:
         return jsonify({'error': 'Missing PDF name'}), 400
-        
-    progress_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user-progress.json")
-    last_page = 1
-    if os.path.exists(progress_path):
-        try:
-            with open(progress_path, 'r', encoding='utf-8') as f:
-                data = py_json.load(f)
-                if pdf_name in data:
-                    last_page = data[pdf_name].get('last_processed_page', 0) + 1
-        except Exception:
-            pass
-            
-    return jsonify({'last_processed_page': last_page})
+    # Progress saving has been disabled, so always start at page 1
+    return jsonify({'last_processed_page': 1})
 
 @app.route('/api/load_pages')
 def load_pages():
@@ -779,10 +759,7 @@ def process_batch():
     batch_page_indices = [int(p['page_idx']) for p in pages_data]
     auto_concatenate_batch(pdf_name, batch_page_indices, force_overwrite=True)
 
-    # 3. Save extracted raw text data of all pages to a local JSON file inside the extractions folder
-    save_json_data()
-        
-    # 4. Return pages data
+    # 3. Return pages data
     for p_data in pages_data:
         page_idx = int(p_data.get('page_idx'))
         state_key = (pdf_name, page_idx)
@@ -988,9 +965,9 @@ def save_csv_internal(pdf_name, page_indices):
         writer = csv.DictWriter(f, fieldnames=['poem', 'category', 'explanation', 'pages'])
         writer.writeheader()
         for entry in final_entries:
-            poem_val = entry['poem'].strip()
+            poem_val = clean_poem_text(entry['poem'])
             cat_val = entry['category'].strip()
-            exp_val = entry['explanation'].strip()
+            exp_val = clean_explanation_text(entry['explanation'])
             pages_str = ",".join(str(p) for p in entry['pages_sourced'])
             
             if not poem_val and not cat_val and not exp_val:
@@ -1003,25 +980,6 @@ def save_csv_internal(pdf_name, page_indices):
                 'pages': pages_str
             })
             
-    # Save progress tracker to user-progress.json
-    progress_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user-progress.json")
-    progress_data = {}
-    if os.path.exists(progress_path):
-        try:
-            with open(progress_path, 'r', encoding='utf-8') as pf:
-                progress_data = py_json.load(pf)
-        except Exception:
-            pass
-            
-    last_page_idx = max(page_indices)
-    progress_data[pdf_name] = {
-        'last_processed_page': last_page_idx + 1,
-        'page_indices': page_indices
-    }
-    
-    with open(progress_path, 'w', encoding='utf-8') as pf:
-        py_json.dump(progress_data, pf, ensure_ascii=False, indent=2)
-        
     return filename
 
 
@@ -1100,9 +1058,6 @@ def run_continuous_extraction(pdf_name, start_page=1, end_page=None):
     
     print("Running auto-concatenation...")
     auto_concatenate_batch(pdf_name, page_indices, force_overwrite=True)
-    
-    print("Saving text data to JSON...")
-    save_json_data()
     
     print("Saving CSV output...")
     try:
