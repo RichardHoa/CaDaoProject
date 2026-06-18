@@ -33,12 +33,27 @@ PAGE_STATES = {}
 
 def is_category(text):
     """Checks if a text line represents a category anchor."""
-    text_clean = text.strip(" \t\n\r\"'“”‘’«»:.-")
-    match = re.match(r'^\(([^)]+)\)', text_clean)
-    if match:
-        content = match.group(1).strip()
-        if content.isupper() and 3 <= len(content) <= 25:
-            return True
+    clean = text.upper()
+    # Remove all characters that are not uppercase Vietnamese/English/Ç letters or spaces
+    clean = re.sub(r'[^A-ZÇĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ\s]', '', clean)
+    clean = clean.strip()
+    clean = re.sub(r'\s+', ' ', clean)
+    
+    # 1. CA DAO
+    if re.match(r'^[CGÇK][AẠÀẢÃÁÂĂ]\s*[DĐO][AÀẢÃẠÁOÒỎÕỌÓÔƠ][OÒỎÕỌÓÔƠ]?[IL1|]?$', clean):
+        return True
+    # 2. THÀNH NGỮ HÁN VIỆT
+    if re.match(r'^TH[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*NH\s+NG[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*\s+H[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*\s*V[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*T$', clean):
+        return True
+    # 3. THÀNH NGỮ
+    if re.match(r'^TH[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*NH\s+NG[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*$', clean):
+        return True
+    # 4. TỤC/TỰC NGỮ HÁN VIỆT
+    if re.match(r'^T[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*C\s+NG[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*\s+H[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*\s*V[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*T$', clean):
+        return True
+    # 5. TỤC/TỰC NGỮ
+    if re.match(r'^T[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*C\s+NG[A-ZĂÂĐÊÔƠƯÁÀẢÃẠẮẰẲẴẶẤẦẨẪẬÉÈẺẼẸẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌỐỒỔỖỘỚỜỞỠỢÚÙỦŨỤỨỪỬỮỰÝỲỶỸỴ]*$', clean):
+        return True
     return False
 
 def _preprocess_page_image(pix):
@@ -330,7 +345,23 @@ def clean_poem_text(text):
             l_match = re.match(r'^([•◦▪▫●■*+~.\s]+)', line)
             if l_match:
                 line = line[l_match.end():].lstrip()
-        lines.append(line)
+        # Replace exactly two periods (..) with one period (.)
+        line = re.sub(r'(?<!\.)\.\.(?!\.)', '.', line)
+        
+        # Verify the beginning of the line: must start with capitalized letter, '-', or '('
+        valid_start_idx = -1
+        for char_idx, char in enumerate(line):
+            if char.isupper() or char in ('-', '('):
+                valid_start_idx = char_idx
+                break
+            elif char.islower():
+                break
+                
+        if valid_start_idx != -1:
+            line = line[valid_start_idx:]
+            lines.append(line)
+        else:
+            continue
         
     return "\n".join(lines).strip()
 
@@ -348,6 +379,8 @@ def clean_explanation_text(text):
         if l_match:
             line = line[l_match.end():].lstrip()
         if line:
+            # Replace exactly two periods (..) with one period (.)
+            line = re.sub(r'(?<!\.)\.\.(?!\.)', '.', line)
             lines.append(line)
     return "\n".join(lines).strip()
 
@@ -359,6 +392,9 @@ def join_poem_lines(lines_list):
     
     # Sort top-to-bottom, left-to-right
     lines_sorted = sorted(lines_list, key=lambda l: (l['y'], l['x']))
+    
+    # Find the left margin of the poem
+    min_x = min(l['x'] for l in lines_sorted)
     
     result = []
     current_verse = []
@@ -372,14 +408,23 @@ def join_poem_lines(lines_list):
             current_verse.append(text)
             continue
             
-        # Find the first alphabetic character to determine if it is a lowercase continuation line
+        # Find the first alphabetic character
         first_alpha = None
         for char in text:
             if char.isalpha():
                 first_alpha = char
                 break
                 
-        if first_alpha and first_alpha.islower():
+        # A line is a continuation if it starts with a lowercase letter,
+        # OR if it is indented significantly to the right of the poem's left margin
+        is_continuation = False
+        if first_alpha:
+            if first_alpha.islower():
+                is_continuation = True
+            elif line['x'] - min_x >= 0.045:  # Indentation check
+                is_continuation = True
+                
+        if is_continuation:
             current_verse.append(text)
         else:
             result.append(" ".join(current_verse))
@@ -455,42 +500,97 @@ def join_explanation_lines_with_spacing(lines_list):
 def auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False):
     """
     Given a list of page indices in a batch, automatically concatenates 
-    each page's orphan_explanation to the last entry's explanation of the previous page
-    if that previous page exists and has entries.
+    each page's orphan_explanation to the last entry's explanation or poem of the previous page
+    supporting multi-page (3+) spanning entries.
     """
     sorted_indices = sorted(page_indices)
-    for idx in sorted_indices:
-        if idx > 0:
-            state_key = (pdf_name, idx)
-            prev_state_key = (pdf_name, idx - 1)
+    if not sorted_indices:
+        return
+
+    active_entry = None
+    source_pages = []
+    
+    # Try to find an active entry from prior pages in PAGE_STATES if the first page in the batch has no entries
+    first_idx = sorted_indices[0]
+    for p_idx in range(first_idx - 1, -1, -1):
+        prev_key = (pdf_name, p_idx)
+        if prev_key in PAGE_STATES and PAGE_STATES[prev_key].get('entries'):
+            active_entry = PAGE_STATES[prev_key]['entries'][-1]
             
-            if state_key in PAGE_STATES and prev_state_key in PAGE_STATES:
-                state = PAGE_STATES[state_key]
-                prev_state = PAGE_STATES[prev_state_key]
+            raw_exp = active_entry.get('explanation_original_raw', active_entry.get('explanation_original', '')).strip()
+            active_entry['explanation_original_raw'] = raw_exp
+            active_entry['explanation_stitched'] = raw_exp
+            
+            raw_poem = active_entry.get('poem_original_raw', active_entry.get('poem_original', '')).strip()
+            active_entry['poem_original_raw'] = raw_poem
+            active_entry['poem_stitched'] = raw_poem
+            
+            source_pages = list(active_entry.get('pages_sourced', [PAGE_STATES[prev_key]['page_num']]))
+            break
+
+    for idx in sorted_indices:
+        state_key = (pdf_name, idx)
+        if state_key not in PAGE_STATES:
+            continue
+        state = PAGE_STATES[state_key]
+        
+        # 1. Stitch any orphan text on the current page to the active_entry of the previous page
+        orphan_txt = state.get('orphan_explanation', '').strip()
+        if orphan_txt and active_entry is not None:
+            stitch_poem = state.get('stitch_poem', False)
+            if stitch_poem:
+                # Append to poem
+                prev_original = active_entry.get('poem_original', '').strip()
+                prev_corrected = active_entry.get('poem_corrected', '').strip()
                 
-                orphan_txt = state.get('orphan_explanation', '').strip()
-                if orphan_txt and prev_state.get('entries'):
-                    last_entry = prev_state['entries'][-1]
-                    
-                    # Store raw unconcatenated text to prevent repeated appends
-                    raw_prev_exp = last_entry.get('explanation_original_raw', last_entry.get('explanation_original', '')).strip()
-                    if 'explanation_original_raw' not in last_entry:
-                        last_entry['explanation_original_raw'] = raw_prev_exp
-                        
-                    joined_original = raw_prev_exp + " " + orphan_txt if raw_prev_exp else orphan_txt
-                    last_entry['explanation_original'] = joined_original
-                    
-                    # Update explanation_corrected if forced or if it wasn't edited
-                    if force_overwrite or not last_entry.get('explanation_corrected') or last_entry['explanation_corrected'].strip() == raw_prev_exp:
-                        last_entry['explanation_corrected'] = joined_original
-                        
-                    # Maintain pages_sourced array on the entry
-                    prev_page_num = prev_state['page_num']
-                    curr_page_num = state['page_num']
-                    
-                    pages_set = set(last_entry.get('pages_sourced', [prev_page_num]))
-                    pages_set.add(curr_page_num)
-                    last_entry['pages_sourced'] = sorted(list(pages_set))
+                if active_entry.get('poem_stitched'):
+                    active_entry['poem_stitched'] += "\n" + orphan_txt
+                else:
+                    active_entry['poem_stitched'] = orphan_txt
+                
+                active_entry['poem_original'] = clean_poem_text(active_entry['poem_stitched'])
+                if force_overwrite or not prev_corrected or prev_corrected == prev_original:
+                    active_entry['poem_corrected'] = active_entry['poem_original']
+            else:
+                # Append to explanation
+                prev_original = active_entry.get('explanation_original', '').strip()
+                prev_corrected = active_entry.get('explanation_corrected', '').strip()
+                
+                if active_entry.get('explanation_stitched'):
+                    active_entry['explanation_stitched'] += " " + orphan_txt
+                else:
+                    active_entry['explanation_stitched'] = orphan_txt
+                
+                active_entry['explanation_original'] = clean_explanation_text(active_entry['explanation_stitched'])
+                if force_overwrite or not prev_corrected or prev_corrected == prev_original:
+                    active_entry['explanation_corrected'] = active_entry['explanation_original']
+            
+            if state['page_num'] not in source_pages:
+                source_pages.append(state['page_num'])
+            active_entry['pages_sourced'] = sorted(source_pages)
+
+        # 2. If the page has entries, the last entry becomes the new active entry
+        if state.get('entries'):
+            # First reset any stitching fields on all entries of this page to prevent cumulative growth
+            for entry in state['entries']:
+                raw_exp = entry.get('explanation_original_raw', entry.get('explanation_original', '')).strip()
+                entry['explanation_original_raw'] = raw_exp
+                entry['explanation_original'] = raw_exp
+                
+                raw_poem = entry.get('poem_original_raw', entry.get('poem_original', '')).strip()
+                entry['poem_original_raw'] = raw_poem
+                entry['poem_original'] = raw_poem
+                
+                entry['pages_sourced'] = [state['page_num']]
+                
+            active_entry = state['entries'][-1]
+            raw_exp = active_entry['explanation_original_raw']
+            active_entry['explanation_stitched'] = raw_exp
+            
+            raw_poem = active_entry['poem_original_raw']
+            active_entry['poem_stitched'] = raw_poem
+            
+            source_pages = [state['page_num']]
 
 
 # --- ROUTES ---
