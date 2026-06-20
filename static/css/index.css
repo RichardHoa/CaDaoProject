@@ -126,6 +126,17 @@
     box-shadow: 0 0.375rem 1.25rem rgba(17, 119, 51, 0.3);
 }
 
+.wiki-card-landing h2 {
+    color: var(--color-wine);
+}
+.wiki-card-landing .card-btn {
+    background: var(--gradient-warm);
+    color: var(--text-color) !important;
+}
+.wiki-card-landing .card-btn:hover {
+    box-shadow: 0 0.375rem 1.25rem rgba(221, 204, 119, 0.5);
+}
+
 /* Explanation and Quote Box */
 .cadao-explanation-container {
     max-width: 48rem;

@@ -12,6 +12,8 @@ bin/
 lib/
 include/
 
+2-split-pdf-output-folder/
+
 # Distribution / packaging
 dist/
 build/
@@ -39,6 +41,8 @@ claude_config.json
 .idea/
 
 *.pdf
+
+output-folder/
 
 
 *.json

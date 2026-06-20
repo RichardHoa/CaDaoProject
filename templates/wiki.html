@@ -1,0 +1,439 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/wiki.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="wiki-section">
+    <!-- Introduction Section -->
+    <div class="wiki-intro-card">
+        <h1>{{ t.wiki_title }}</h1>
+        <p class="wiki-intro-text">
+            {{ t.wiki_intro | safe }}
+        </p>
+    </div>
+
+    <!-- Filters Control Panel -->
+    <div class="wiki-controls">
+        <div class="search-box">
+            <input type="text" id="wikiSearchInput" placeholder="{{ t.wiki_search_placeholder }}" autocomplete="off">
+            <span class="search-icon">🔍</span>
+        </div>
+        
+        <div class="category-filter">
+            <select id="wikiCategorySelect" aria-label="{{ t.wiki_category_all }}">
+                <option value="All">{{ t.wiki_category_all }}</option>
+                <option value="(CA DAO)">(CA DAO)</option>
+                <option value="(THÀNH NGỮ)">(THÀNH NGỮ)</option>
+                <option value="(TỤC NGỮ)">(TỤC NGỮ)</option>
+                <option value="(THÀNH NGỮ HÁN VIỆT)">(THÀNH NGỮ HÁN VIỆT)</option>
+                <option value="(TỤC NGỮ HÁN VIỆT)">(TỤC NGỮ HÁN VIỆT)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Alphabet Tab Bar -->
+    <div class="alphabet-container" id="alphabetContainer">
+        <!-- Alphabet pills will be rendered here dynamically or statically -->
+        {% set alphabets = ['A', 'B', 'C', 'D', 'Đ', 'E', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'X', 'Y'] %}
+        {% for letter in alphabets %}
+        <button class="alphabet-pill {% if loop.first %}active{% endif %}" data-letter="{{ letter }}">{{ letter }}</button>
+        {% endfor %}
+    </div>
+
+    <!-- Entries Output List -->
+    <div class="wiki-entries-list" id="wikiEntriesList">
+        <!-- Dynamic entry cards appended here -->
+    </div>
+
+    <!-- Scroll Sentinel / Loader -->
+    <div class="wiki-scroll-sentinel" id="wikiScrollSentinel">
+        <div class="sentinel-loader" id="sentinelLoader">
+            <div class="spinner"></div>
+            <span>{{ t.wiki_loading }}</span>
+        </div>
+        <div class="sentinel-end hidden" id="sentinelEnd">
+            <span>{{ t.wiki_end_of_list }}</span>
+        </div>
+        <div class="sentinel-empty hidden" id="sentinelEmpty">
+            <span>{{ t.wiki_no_results }}</span>
+        </div>
+    </div>
+
+    <!-- Lightbox Modal for enlarged scans -->
+    <div id="wikiLightbox" class="wiki-lightbox hidden" role="dialog" aria-modal="true">
+        <button class="lightbox-close" id="lightboxClose" aria-label="Close image">×</button>
+        <img id="lightboxImg" class="lightbox-content" src="" alt="Enlarged scan">
+    </div>
+
+    <!-- Back to Top Button -->
+    <button id="backToTopBtn" class="back-to-top hidden" aria-label="Back to top">↑</button>
+</section>
+{% endblock %}
+
+{% block script %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const entriesList = document.getElementById("wikiEntriesList");
+        const searchInput = document.getElementById("wikiSearchInput");
+        const categorySelect = document.getElementById("wikiCategorySelect");
+        const alphabetContainer = document.getElementById("alphabetContainer");
+        const loader = document.getElementById("sentinelLoader");
+        const endMessage = document.getElementById("sentinelEnd");
+        const emptyMessage = document.getElementById("sentinelEmpty");
+
+        // Lightbox and Back to Top Selectors
+        const lightbox = document.getElementById("wikiLightbox");
+        const lightboxImg = document.getElementById("lightboxImg");
+        const lightboxClose = document.getElementById("lightboxClose");
+        const backToTopBtn = document.getElementById("backToTopBtn");
+
+        let currentAlphabet = "A";
+        let currentCategory = "All";
+        let currentSearch = "";
+        let currentPage = 1;
+        let totalPages = 1;
+        let isFetching = false;
+
+        // Virtual List States
+        const allFetchedEntries = [];
+        const itemHeights = [];
+
+        // Spacer elements to preserve scroll position
+        const topSpacer = document.createElement("div");
+        topSpacer.id = "topSpacer";
+        topSpacer.style.height = "0px";
+
+        const bottomSpacer = document.createElement("div");
+        bottomSpacer.id = "bottomSpacer";
+        bottomSpacer.style.height = "0px";
+
+        entriesList.appendChild(topSpacer);
+        entriesList.appendChild(bottomSpacer);
+
+        // Initialize Alphabet Pill Clicks
+        alphabetContainer.addEventListener("click", function(e) {
+            if (e.target.classList.contains("alphabet-pill")) {
+                document.querySelectorAll(".alphabet-pill").forEach(pill => pill.classList.remove("active"));
+                e.target.classList.add("active");
+                currentAlphabet = e.target.getAttribute("data-letter");
+                
+                // Clear search when clicking alphabet tab for better navigation
+                if (currentSearch !== "") {
+                    searchInput.value = "";
+                    currentSearch = "";
+                }
+                
+                resetAndFetch();
+            }
+        });
+
+        // Initialize Category Filter Change
+        categorySelect.addEventListener("change", function(e) {
+            currentCategory = e.target.value;
+            resetAndFetch();
+        });
+
+        // Initialize Search input with Debounce
+        let debounceTimer;
+        searchInput.addEventListener("input", function(e) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                currentSearch = e.target.value.trim();
+                
+                // If search is not empty, deactivate the alphabet pills visually 
+                // since search matches across all letters
+                if (currentSearch !== "") {
+                    document.querySelectorAll(".alphabet-pill").forEach(pill => pill.classList.remove("active"));
+                } else {
+                    // Reactivate current alphabet pill
+                    const activePill = document.querySelector(`.alphabet-pill[data-letter="${currentAlphabet}"]`);
+                    if (activePill) activePill.classList.add("active");
+                }
+                
+                resetAndFetch();
+            }, 300);
+        });
+
+        function resetAndFetch() {
+            currentPage = 1;
+            totalPages = 1;
+            allFetchedEntries.length = 0;
+            itemHeights.length = 0;
+            entriesList.innerHTML = "";
+            entriesList.appendChild(topSpacer);
+            entriesList.appendChild(bottomSpacer);
+            
+            endMessage.classList.add("hidden");
+            emptyMessage.classList.add("hidden");
+            loader.classList.remove("hidden");
+            
+            fetchEntries();
+        }
+
+        async function fetchEntries() {
+            if (isFetching) return;
+            isFetching = true;
+            loader.classList.remove("hidden");
+
+            // Build URL parameters
+            const params = new URLSearchParams({
+                page: currentPage,
+                per_page: 20
+            });
+            
+            if (currentSearch !== "") {
+                params.append("search", currentSearch);
+            } else {
+                params.append("alphabet", currentAlphabet);
+            }
+
+            if (currentCategory !== "All" && currentCategory !== "") {
+                params.append("category", currentCategory);
+            }
+
+            try {
+                const response = await fetch(`/api/wiki?${params.toString()}`);
+                if (!response.ok) throw new Error("Network response was not ok");
+                
+                const data = await response.json();
+                totalPages = data.total_pages;
+                currentPage = data.current_page;
+                
+                renderEntries(data.entries);
+                
+                isFetching = false;
+                loader.classList.add("hidden");
+                
+                if (data.total_count === 0) {
+                    emptyMessage.classList.remove("hidden");
+                } else if (currentPage >= totalPages) {
+                    endMessage.classList.remove("hidden");
+                }
+            } catch (error) {
+                console.error("Error loading wiki entries:", error);
+                isFetching = false;
+                loader.classList.add("hidden");
+            }
+        }
+
+        function renderEntries(entries) {
+            const startIdx = allFetchedEntries.length;
+            allFetchedEntries.push(...entries);
+            
+            // Initialize default heights for new items
+            for (let i = startIdx; i < allFetchedEntries.length; i++) {
+                itemHeights.push(250); // Default estimate
+            }
+            
+            updateVirtualList();
+        }
+
+        function insertCard(idx) {
+            const entry = allFetchedEntries[idx];
+            if (!entry) return;
+
+            const card = document.createElement("div");
+            card.className = "wiki-card";
+            card.dataset.index = idx;
+            card.dataset.id = entry.id;
+            
+            const formattedPoem = entry.poem.replace(/\n/g, "<br>");
+            const formattedExplanation = entry.explanation.replace(/\n/g, "<br>");
+            
+            card.innerHTML = `
+                <div class="wiki-card-left">
+                    <div class="wiki-card-category-badge">${entry.category}</div>
+                    <blockquote class="wiki-card-poem">${formattedPoem}</blockquote>
+                    <div class="wiki-card-explanation">${formattedExplanation}</div>
+                </div>
+                <div class="wiki-card-right">
+                    <div class="image-wrapper">
+                        <div class="image-skeleton"></div>
+                        <img 
+                            src="/wiki/image/${entry.id}" 
+                            alt="${entry.Alphabet} - ${entry.category}" 
+                            loading="lazy"
+                            onload="this.classList.add('loaded'); this.previousElementSibling.style.display='none';"
+                            onerror="this.src='/static/public/no_image.png'; this.previousElementSibling.style.display='none';"
+                        >
+                    </div>
+                </div>
+            `;
+            
+            // Reconcile ordering and insert
+            const children = entriesList.children;
+            let insertBeforeNode = bottomSpacer;
+            for (let j = 0; j < children.length; j++) {
+                const child = children[j];
+                if (child !== topSpacer && child !== bottomSpacer) {
+                    const childIndex = parseInt(child.dataset.index);
+                    if (childIndex > idx) {
+                        insertBeforeNode = child;
+                        break;
+                    }
+                }
+            }
+            entriesList.insertBefore(card, insertBeforeNode);
+            
+            // Update actual measured height
+            requestAnimationFrame(() => {
+                const height = card.offsetHeight;
+                if (height > 0) {
+                    itemHeights[idx] = height;
+                }
+            });
+        }
+
+        function updateVirtualList() {
+            if (allFetchedEntries.length === 0) {
+                topSpacer.style.height = "0px";
+                bottomSpacer.style.height = "0px";
+                return;
+            }
+
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const containerOffset = entriesList.offsetTop;
+            const relativeScrollTop = Math.max(0, scrollTop - containerOffset);
+            const viewportHeight = window.innerHeight;
+
+            // Find visible start index based on height summation
+            let currentY = 0;
+            let startIndex = 0;
+            for (let i = 0; i < itemHeights.length; i++) {
+                if (currentY + itemHeights[i] < relativeScrollTop) {
+                    startIndex = i;
+                    currentY += itemHeights[i];
+                } else {
+                    break;
+                }
+            }
+
+            // Safe buffer of 10 items before viewport
+            startIndex = Math.max(0, startIndex - 10);
+
+            // Find visible end index based on view height and safe buffer
+            let endIndex = startIndex;
+            let endY = 0;
+            for (let i = 0; i < startIndex; i++) {
+                endY += itemHeights[i];
+            }
+
+            while (endIndex < itemHeights.length && endY < relativeScrollTop + viewportHeight) {
+                endY += itemHeights[endIndex];
+                endIndex++;
+            }
+            endIndex = Math.min(itemHeights.length - 1, endIndex + 10);
+
+            // Trigger next page fetch if approaching scroll bounds
+            if (endIndex >= allFetchedEntries.length - 5 && currentPage < totalPages && !isFetching) {
+                currentPage++;
+                fetchEntries();
+            }
+
+            // Adjust spacers to lock scrolling structure
+            let topHeight = 0;
+            for (let i = 0; i < startIndex; i++) {
+                topHeight += itemHeights[i];
+            }
+
+            let bottomHeight = 0;
+            for (let i = endIndex + 1; i < itemHeights.length; i++) {
+                bottomHeight += itemHeights[i];
+            }
+
+            topSpacer.style.height = topHeight + "px";
+            bottomSpacer.style.height = bottomHeight + "px";
+
+            // Remove card wrappers outside active view window
+            const children = Array.from(entriesList.children);
+            children.forEach(child => {
+                if (child === topSpacer || child === bottomSpacer) return;
+                const idx = parseInt(child.dataset.index);
+                if (idx < startIndex || idx > endIndex) {
+                    entriesList.removeChild(child);
+                }
+            });
+
+            // Insert card elements inside active view window
+            for (let i = startIndex; i <= endIndex; i++) {
+                if (i < allFetchedEntries.length) {
+                    let card = entriesList.querySelector(`.wiki-card[data-index="${i}"]`);
+                    if (!card) {
+                        insertCard(i);
+                    }
+                }
+            }
+        }
+
+        // --- Lightbox Functions ---
+        function openLightbox(src) {
+            lightboxImg.src = src;
+            lightbox.classList.remove("hidden");
+            document.body.style.overflow = "hidden"; // Disable background scrolling
+        }
+
+        function closeLightbox() {
+            lightbox.classList.add("hidden");
+            lightboxImg.src = "";
+            document.body.style.overflow = ""; // Restore background scrolling
+        }
+
+        // Image Click Delegation inside Entries List
+        entriesList.addEventListener("click", function(e) {
+            const img = e.target.closest("img");
+            if (img && img.closest(".image-wrapper")) {
+                openLightbox(img.src);
+            }
+        });
+
+        lightboxClose.addEventListener("click", closeLightbox);
+        lightbox.addEventListener("click", function(e) {
+            if (e.target === lightbox) {
+                closeLightbox();
+            }
+        });
+
+        document.addEventListener("keydown", function(e) {
+            if (e.key === "Escape" && !lightbox.classList.contains("hidden")) {
+                closeLightbox();
+            }
+        });
+
+        // --- Back to Top Functions ---
+        function handleScrollBtnVisibility() {
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            if (scrollTop > 400) {
+                backToTopBtn.classList.remove("hidden");
+            } else {
+                backToTopBtn.classList.add("hidden");
+            }
+        }
+
+        backToTopBtn.addEventListener("click", function() {
+            window.scrollTo({
+                top: 0,
+                behavior: "auto" // Snap immediately to the top
+            });
+        });
+
+        // Throttled Scroll Listener using RequestAnimationFrame
+        let scrollTimeout;
+        function onScroll() {
+            if (!scrollTimeout) {
+                scrollTimeout = requestAnimationFrame(() => {
+                    updateVirtualList();
+                    handleScrollBtnVisibility();
+                    scrollTimeout = null;
+                });
+            }
+        }
+        window.addEventListener("scroll", onScroll);
+        window.addEventListener("resize", onScroll);
+
+        // Start initial load
+        fetchEntries();
+    });
+</script>
+{% endblock %}
