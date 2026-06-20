@@ -13,6 +13,7 @@ Frontend displays: poem, meaning, keywords, matched keyword, accuracy %
 
 import json
 import pickle
+import sqlite3
 import numpy as np
 import faiss
 import time
@@ -685,12 +686,203 @@ def post_feedback():
     return jsonify({"status": "success"})
 
 
+# --- Wiki Configurations & Helper Functions ---
+WIKI_CSV_FILE = "extractions/wiki.csv"
+WIKI_DB_FILE = "data/wiki.db"
+WIKI_IMAGES_DIR = "extractions/output-folder"
+
+def get_base_alphabet(letter):
+    if not letter:
+        return 'A'
+    l = letter.strip().upper()[0]
+    
+    # Map Vietnamese accented characters to their base letters
+    if l in ('A', 'Ă', 'Â', 'Á', 'À', 'Ả', 'Ã', 'Ạ', 'Ấ', 'Ầ', 'Ẩ', 'Ẫ', 'Ậ', 'Ắ', 'Ằ', 'Ẳ', 'Ẵ', 'Ặ'):
+        return 'A'
+    if l in ('E', 'Ê', 'É', 'È', 'Ẻ', 'Ẽ', 'Ẹ', 'Ế', 'Ề', 'Ể', 'Ễ', 'Ệ'):
+        return 'E'
+    if l in ('I', 'Í', 'Ì', 'Ỉ', 'Ĩ', 'Ị'):
+        return 'I'
+    if l in ('O', 'Ô', 'Ơ', 'Ó', 'Ò', 'Ỏ', 'Õ', 'Ọ', 'Ố', 'Ồ', 'Ổ', 'Ỗ', 'Ộ', 'Ớ', 'Ờ', 'Ở', 'Ỡ', 'Ợ'):
+        return 'O'
+    if l in ('U', 'Ư', 'Ú', 'Ù', 'Ủ', 'Ũ', 'Ụ', 'Ứ', 'Ừ', 'Ử', 'Ữ', 'Ự'):
+        return 'U'
+    if l in ('Y', 'Ý', 'Ỳ', 'Ỷ', 'Ỹ'):
+        return 'Y'
+    if l in ('D'):
+        return 'D'
+    if l in ('Đ'):
+        return 'Đ'
+    return l
+
+def init_wiki_db():
+    """Initialize SQLite database for Wiki if it does not exist."""
+    db_dir = os.path.dirname(WIKI_DB_FILE)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+        
+    conn = sqlite3.connect(WIKI_DB_FILE)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS wiki (
+            id TEXT PRIMARY KEY,
+            Alphabet TEXT,
+            base_alphabet TEXT,
+            poem TEXT,
+            category TEXT,
+            explanation TEXT,
+            pages TEXT
+        )
+    """)
+    conn.commit()
+    
+    cursor.execute("SELECT COUNT(*) FROM wiki")
+    count = cursor.fetchone()[0]
+    
+    if count == 0 and os.path.exists(WIKI_CSV_FILE):
+        print(f"Initializing wiki database from {WIKI_CSV_FILE}...")
+        try:
+            with open(WIKI_CSV_FILE, mode='r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                to_insert = []
+                for row in reader:
+                    row_id = row.get("id", "")
+                    alphabet = row.get("Alphabet", "")
+                    base_alphabet = get_base_alphabet(alphabet)
+                    poem = row.get("poem", "")
+                    category = row.get("category", "")
+                    explanation = row.get("explanation", "")
+                    pages = row.get("pages", "")
+                    
+                    to_insert.append((
+                        row_id, alphabet, base_alphabet, poem, category, explanation, pages
+                    ))
+                
+                cursor.executemany("""
+                    INSERT INTO wiki (id, Alphabet, base_alphabet, poem, category, explanation, pages)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, to_insert)
+                
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_base_alphabet ON wiki (base_alphabet)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_category ON wiki (category)")
+                
+                conn.commit()
+                
+                cursor.execute("SELECT COUNT(*) FROM wiki")
+                new_count = cursor.fetchone()[0]
+                print(f"Wiki database initialized with {new_count} entries.")
+        except Exception as e:
+            print(f"ERROR: Failed to import wiki.csv to database: {e}")
+            conn.rollback()
+            
+    conn.close()
+
+# --- Wiki Routes ---
+
+@app.route("/wiki-page")
+def wiki_page():
+    """Serve the wiki interface"""
+    return render_template("wiki.html")
+
+@app.route("/wiki/image/<image_id>")
+def get_wiki_image(image_id):
+    """Serve cropped scan images safely from extractions/output-folder."""
+    safe_id = os.path.basename(image_id)
+    if not safe_id.endswith(".png"):
+        safe_id += ".png"
+        
+    img_path = os.path.join("extractions", "output-folder", safe_id)
+    if not os.path.exists(img_path):
+        return "Image not found", 404
+        
+    from flask import send_file
+    return send_file(img_path, mimetype='image/png')
+
+@app.route("/api/wiki")
+def api_wiki():
+    """Retrieve paginated, filtered, and searched wiki entries from SQLite."""
+    alphabet = request.args.get("alphabet", "A").strip().upper()
+    category = request.args.get("category", "").strip()
+    search_query = request.args.get("search", "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    
+    if page < 1:
+        page = 1
+    if per_page < 1:
+        per_page = 20
+        
+    offset = (page - 1) * per_page
+    
+    params = {}
+    sql = "SELECT id, Alphabet, base_alphabet, poem, category, explanation, pages FROM wiki WHERE 1=1"
+    count_sql = "SELECT COUNT(*) FROM wiki WHERE 1=1"
+    
+    if search_query:
+        sql += " AND LOWER(poem) LIKE :search"
+        count_sql += " AND LOWER(poem) LIKE :search"
+        params["search"] = f"%{search_query.lower()}%"
+    else:
+        sql += " AND base_alphabet = :alphabet"
+        count_sql += " AND base_alphabet = :alphabet"
+        params["alphabet"] = alphabet
+        
+    if category and category != "All":
+        sql += " AND category = :category"
+        count_sql += " AND category = :category"
+        params["category"] = category
+        
+    sql += " ORDER BY Alphabet ASC, poem ASC LIMIT :limit OFFSET :offset"
+    params["limit"] = per_page
+    params["offset"] = offset
+    
+    try:
+        conn = sqlite3.connect(WIKI_DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute(count_sql, {k: v for k, v in params.items() if k not in ("limit", "offset")})
+        total_count = cursor.fetchone()[0]
+        
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        
+        entries = []
+        for r in rows:
+            entries.append({
+                "id": r["id"],
+                "Alphabet": r["Alphabet"],
+                "base_alphabet": r["base_alphabet"],
+                "poem": r["poem"],
+                "category": r["category"],
+                "explanation": r["explanation"],
+                "pages": r["pages"]
+            })
+            
+        conn.close()
+        
+        import math
+        total_pages = math.ceil(total_count / per_page)
+        
+        return jsonify({
+            "entries": entries,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "current_page": page,
+            "per_page": per_page
+        })
+    except Exception as e:
+        print(f"ERROR in api_wiki: {e}")
+        return jsonify({"error": "Failed to query database", "details": str(e)}), 500
+
+
 # Initialize data on module load so WSGI servers (Waitress/Gunicorn) can access it
+init_wiki_db()
 load_data()
 
 def main():
     """Initialize and run the server"""
-    print("Starting server at http://localhost:4000")
     app.run(host="0.0.0.0", port=4001, debug=True)
 
 if __name__ == "__main__":

@@ -11,6 +11,9 @@ from flask import Flask, request, jsonify, render_template, send_file
 import fitz  # PyMuPDF
 import objc
 from Foundation import NSURL
+import uuid
+import gc
+
 
 # Load macOS Vision framework via PyObjC
 try:
@@ -300,6 +303,7 @@ def get_initial_boxes(lines):
             explanation_box = get_bbox_of_lines(explanation_lines)
             
             entries.append({
+                'id': str(uuid.uuid4()),
                 'entry_idx': j,
                 'boxes': {
                     'poem': poem_box,
@@ -497,6 +501,45 @@ def join_explanation_lines_with_spacing(lines_list):
     return clean_explanation_text(joined)
 
 
+def union_boxes(boxes_list):
+    valid_boxes = [b for b in boxes_list if b and isinstance(b, dict)]
+    if not valid_boxes:
+        return None
+    x0 = min(b['x'] for b in valid_boxes)
+    y0 = min(b['y'] for b in valid_boxes)
+    x1 = max(b['x'] + b['w'] for b in valid_boxes)
+    y1 = max(b['y'] + b['h'] for b in valid_boxes)
+    return {
+        'x': x0,
+        'y': y0,
+        'w': x1 - x0,
+        'h': y1 - y0
+    }
+
+
+def stitch_images_vertically(images):
+    if not images:
+        return None
+    if len(images) == 1:
+        return images[0]
+    
+    max_w = max(img.shape[1] for img in images)
+    
+    padded_images = []
+    for img in images:
+        h, w, c = img.shape
+        if w < max_w:
+            # Create a white background padding on the right to match the maximum width
+            padded = np.ones((h, max_w, c), dtype=np.uint8) * 255
+            padded[:, :w, :] = img
+            padded_images.append(padded)
+        else:
+            padded_images.append(img)
+            
+    # Concatenate vertically
+    return np.vstack(padded_images)
+
+
 def auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False):
     """
     Given a list of page indices in a batch, automatically concatenates 
@@ -526,6 +569,16 @@ def auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False):
             active_entry['poem_stitched'] = raw_poem
             
             source_pages = list(active_entry.get('pages_sourced', [PAGE_STATES[prev_key]['page_num']]))
+            if 'id' not in active_entry or not active_entry['id']:
+                active_entry['id'] = str(uuid.uuid4())
+            if 'entry_parts' not in active_entry:
+                active_entry['entry_parts'] = []
+                entry_box = union_boxes([active_entry['boxes'].get('poem'), active_entry['boxes'].get('category'), active_entry['boxes'].get('explanation')])
+                if entry_box:
+                    active_entry['entry_parts'].append({
+                        'page_idx': source_pages[0] - 1,
+                        'box': entry_box
+                    })
             break
 
     for idx in sorted_indices:
@@ -565,6 +618,24 @@ def auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False):
                 if force_overwrite or not prev_corrected or prev_corrected == prev_original:
                     active_entry['explanation_corrected'] = active_entry['explanation_original']
             
+            # Append the orphan_box to entry_parts for image extraction (covers both poem and explanation stitching)
+            if state.get('orphan_box'):
+                if 'entry_parts' not in active_entry:
+                    active_entry['entry_parts'] = []
+                    entry_box = union_boxes([active_entry['boxes'].get('poem'), active_entry['boxes'].get('category'), active_entry['boxes'].get('explanation')])
+                    if entry_box:
+                        start_page_idx = active_entry.get('pages_sourced', [1])[0] - 1
+                        active_entry['entry_parts'].append({
+                            'page_idx': start_page_idx,
+                            'box': entry_box
+                        })
+                # Avoid duplicates
+                if not any(part.get('page_idx') == idx for part in active_entry['entry_parts']):
+                    active_entry['entry_parts'].append({
+                        'page_idx': idx,
+                        'box': state['orphan_box']
+                    })
+            
             if state['page_num'] not in source_pages:
                 source_pages.append(state['page_num'])
             active_entry['pages_sourced'] = sorted(source_pages)
@@ -573,6 +644,9 @@ def auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False):
         if state.get('entries'):
             # First reset any stitching fields on all entries of this page to prevent cumulative growth
             for entry in state['entries']:
+                if 'id' not in entry or not entry['id']:
+                    entry['id'] = str(uuid.uuid4())
+                
                 raw_exp = entry.get('explanation_original_raw', entry.get('explanation_original', '')).strip()
                 entry['explanation_original_raw'] = raw_exp
                 entry['explanation_original'] = raw_exp
@@ -582,6 +656,14 @@ def auto_concatenate_batch(pdf_name, page_indices, force_overwrite=False):
                 entry['poem_original'] = raw_poem
                 
                 entry['pages_sourced'] = [state['page_num']]
+                
+                entry['entry_parts'] = []
+                entry_box = union_boxes([entry['boxes'].get('poem'), entry['boxes'].get('category'), entry['boxes'].get('explanation')])
+                if entry_box:
+                    entry['entry_parts'].append({
+                        'page_idx': idx,
+                        'box': entry_box
+                    })
                 
             active_entry = state['entries'][-1]
             raw_exp = active_entry['explanation_original_raw']
@@ -707,6 +789,8 @@ def load_pages():
             has_cat = len(entries) > 0
             
             initial_state = {
+                'id': str(uuid.uuid4()),
+                'orphan_id': str(uuid.uuid4()),
                 'page_idx': idx,
                 'page_num': idx + 1,
                 'stitch_poem': False,
@@ -1038,11 +1122,19 @@ def save_csv_internal(pdf_name, page_indices):
         
         # If there is orphan explanation and no entries yet, create an orphan entry row
         if orphan and not final_entries:
+            entry_parts = []
+            if page.get('orphan_box'):
+                entry_parts.append({
+                    'page_idx': page['page_idx'],
+                    'box': page['orphan_box']
+                })
             final_entries.append({
+                'id': page.get('orphan_id', str(uuid.uuid4())),
                 'poem': '',
                 'category': '',
                 'explanation': orphan,
-                'pages_sourced': [page_num]
+                'pages_sourced': [page_num],
+                'entry_parts': entry_parts
             })
             
         for entry in entries:
@@ -1051,18 +1143,31 @@ def save_csv_internal(pdf_name, page_indices):
             exp_val = entry.get('explanation_corrected', '').strip()
             pages_list = entry.get('pages_sourced', [page_num])
             
+            # Fallback if entry_parts is empty but any component box exists
+            entry_parts = entry.get('entry_parts', [])
+            if not entry_parts:
+                entry_box = union_boxes([entry.get('boxes', {}).get('poem'), entry.get('boxes', {}).get('category'), entry.get('boxes', {}).get('explanation')])
+                if entry_box:
+                    entry_parts = [{
+                        'page_idx': page['page_idx'],
+                        'box': entry_box
+                    }]
+            
             final_entries.append({
+                'id': entry.get('id', str(uuid.uuid4())),
                 'poem': poem_val,
                 'category': cat_val,
                 'explanation': exp_val,
-                'pages_sourced': pages_list
+                'pages_sourced': pages_list,
+                'entry_parts': entry_parts
             })
 
     filename = "poem-extraction.csv"
     csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
     
+    # Save CSV with unique ID column
     with open(csv_path, 'w', encoding='utf-8', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['poem', 'category', 'explanation', 'pages'])
+        writer = csv.DictWriter(f, fieldnames=['id', 'poem', 'category', 'explanation', 'pages'])
         writer.writeheader()
         for entry in final_entries:
             poem_val = clean_poem_text(entry['poem'])
@@ -1074,12 +1179,90 @@ def save_csv_internal(pdf_name, page_indices):
                 continue
                 
             writer.writerow({
+                'id': entry['id'],
                 'poem': poem_val,
                 'category': cat_val,
                 'explanation': exp_val,
                 'pages': pages_str
             })
             
+    # Crop and stitch screenshots for entries containing poems
+    output_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output-folder")
+    os.makedirs(output_folder, exist_ok=True)
+    
+    doc = fitz.open(pdf_path)
+    try:
+        for entry in final_entries:
+            entry_id = entry['id']
+            poem_val = clean_poem_text(entry['poem'])
+            if not poem_val:
+                continue
+                
+            entry_parts = entry.get('entry_parts', [])
+            if not entry_parts:
+                continue
+                
+            images = []
+            for part in entry_parts:
+                p_idx = part.get('page_idx')
+                box = part.get('box')
+                if p_idx is None or not box or not isinstance(box, dict):
+                    continue
+                if p_idx < 0 or p_idx >= len(doc):
+                    continue
+                    
+                try:
+                    page = doc[p_idx]
+                    
+                    # Convert normalized coordinates to points
+                    x0 = max(0.0, box.get('x', 0.0)) * page.rect.width
+                    y0 = max(0.0, box.get('y', 0.0)) * page.rect.height
+                    x1 = min(1.0, box.get('x', 0.0) + box.get('w', 0.0)) * page.rect.width
+                    y1 = min(1.0, box.get('y', 0.0) + box.get('h', 0.0)) * page.rect.height
+                    
+                    if x1 <= x0 or y1 <= y0:
+                        continue
+                        
+                    fitz_rect = fitz.Rect(x0, y0, x1, y1)
+                    
+                    # Render the cropped region (zoom = 2.0)
+                    zoom = 2.0
+                    mat = fitz.Matrix(zoom, zoom)
+                    pix = page.get_pixmap(matrix=mat, clip=fitz_rect)
+                    img_bytes = pix.tobytes("png")
+                    nparr = np.frombuffer(img_bytes, np.uint8)
+                    cv_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    if cv_img is not None:
+                        images.append(cv_img)
+                        
+                    # Explicitly delete PyMuPDF and numpy page resources to free memory immediately
+                    del pix
+                    del img_bytes
+                    del nparr
+                    del page
+                except Exception as e:
+                    print(f"Error rendering crop for entry {entry_id} on page {p_idx+1}: {e}")
+                    
+            if images:
+                try:
+                    stitched_img = stitch_images_vertically(images)
+                    if stitched_img is not None:
+                        img_path = os.path.join(output_folder, f"{entry_id}.png")
+                        cv2.imwrite(img_path, stitched_img)
+                        del stitched_img
+                except Exception as e:
+                    print(f"Error stitching/saving image for entry {entry_id}: {e}")
+                    
+                # Explicitly delete intermediate crop arrays
+                for img in images:
+                    del img
+                del images
+                
+            # Invoke Python garbage collector to reclaim C++ image buffer memory after every entry
+            gc.collect()
+    finally:
+        doc.close()
+        
     return filename
 
 
