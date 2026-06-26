@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 <div class="meaning">${escapeHtml(item.meaning)}</div>
                                 ${item.keywords ? `<div class="keywords">${i18n.keyword_label}${escapeHtml(item.keywords)}</div>` : ''}
                                 <div class="match-info">
+                                    ${item.category ? `<span class="category-badge">${escapeHtml(item.category)}</span>` : ''}
                                     <span class="keyword-badge">${i18n.matched_label}"${escapeHtml(item.matched_keyword)}"</span>
                                     <span class="accuracy">${i18n.accuracy_label}${(item.score * 100).toFixed(1)}%</span>
                                 </div>

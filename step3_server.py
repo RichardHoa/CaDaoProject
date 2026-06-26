@@ -260,8 +260,9 @@ def search_poems_literal(query, limit=TARGET_RESULTS):
     """
     Search poems by literal substring matching in:
     1. Poem text
-    2. Meaning
-    3. Keywords
+    2. Meaning (searchable explanation)
+    3. Explanation (original explanation)
+    4. Keywords
     Returns list of (poem_id, score) where score is 1.0 for literal matches.
     """
     query_lower = query.lower().strip()
@@ -270,10 +271,11 @@ def search_poems_literal(query, limit=TARGET_RESULTS):
     for i, p in enumerate(poems_data):
         poem_text = p.get("poem", "").lower()
         meaning = p.get("meaning", "").lower()
+        explanation = p.get("explanation", "").lower()
         keywords = p.get("keywords", "").lower()
         
         # Check for literal match
-        if query_lower in poem_text or query_lower in meaning or query_lower in keywords:
+        if query_lower in poem_text or query_lower in meaning or query_lower in explanation or query_lower in keywords:
             results.append((i, 1.0))
             
         if len(results) >= limit:
@@ -330,7 +332,8 @@ def search_poems(query, top_n=TARGET_RESULTS):
                 results.append(
                     {
                         "poem": poem["poem"],
-                        "meaning": poem["meaning"],
+                        "meaning": poem.get("explanation", ""),
+                        "category": poem.get("category", ""),
                         "keywords": poem.get("keywords", ""),
                         "matched_keyword": match_type,
                         "score": score,
@@ -362,7 +365,8 @@ def search_poems(query, top_n=TARGET_RESULTS):
                     results.append(
                         {
                             "poem": poem["poem"],
-                            "meaning": poem["meaning"],
+                            "meaning": poem.get("explanation", ""),
+                            "category": poem.get("category", ""),
                             "keywords": poem.get("keywords", ""),
                             "matched_keyword": match_type,
                             "score": score,
@@ -389,7 +393,8 @@ def search_poems(query, top_n=TARGET_RESULTS):
                     results.append(
                         {
                             "poem": poem["poem"],
-                            "meaning": poem["meaning"],
+                            "meaning": poem.get("explanation", ""),
+                            "category": poem.get("category", ""),
                             "keywords": poem.get("keywords", ""),
                             "matched_keyword": "Khớp theo phân tích AI",
                             "score": score,
