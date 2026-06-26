@@ -48,8 +48,8 @@ def log_request(response):
 # Config
 EMBEDDINGS_FILE = "embeddings.pkl"
 KEYWORDS_FILE = "keywords.pkl"
-SIMILARITY_THRESHOLD = 0.6
-KEYWORD_SIMILARITY_THRESHOLD = 0.7
+SIMILARITY_THRESHOLD = 0.45
+KEYWORD_SIMILARITY_THRESHOLD = 0.55
 TARGET_RESULTS = 20
 TOP_K_KEYWORDS = 5
 LEARNING_DATA_FILE = "data/learning_data.json"
@@ -130,8 +130,12 @@ def load_data():
         DATA_LOADED = False
 
 
-def embed_text(text, use_instruction=True):
-    """Create embedding for text using local SentenceTransformer model."""
+def embed_text(text):
+    """Create embedding for text using local SentenceTransformer model.
+    
+    Note: AITeamVN/Vietnamese_Embedding (based on BGE-M3) does NOT require
+    any instruction prefixes (no 'query:' or 'passage:' needed).
+    """
     emb = embedding_model.encode([text], convert_to_numpy=True)
     return normalize(emb, norm="l2")
 
@@ -170,17 +174,14 @@ def search_poems_by_embedding(
     # 0: Poem, 1: Meaning, 2: Keywords
     MATCH_TYPES = {
         0: "Khớp theo lời thơ",
-        1: "Khớp theo ý nghĩa"
+        1: "Khớp theo ý nghĩa",
+        2: "Khớp theo từ khóa"
     }
 
     for i, idx in enumerate(indices[0]):
         if idx != -1 and scores[0][i] >= threshold:
             poem_id = vector_to_poem_map[idx]
             match_type_id = idx % 3
-            
-            # Skip keyword vector matches in Step 1/1.5 (we prefer literal matches in Step 2)
-            if match_type_id == 2:
-                continue
                 
             match_description = MATCH_TYPES.get(match_type_id, "Khớp ngữ nghĩa")
 
@@ -281,10 +282,10 @@ def search_poems(query, top_n=TARGET_RESULTS):
         print(f"  [RESULT] Total: {len(results)} poems after original semantic search")
 
     # Step 2: Keyword Expansion + Literal Lookup (Symmetric Matching)
+    similar_keywords = []  # Store for potential use in fallback
     if len(results) < 15:
         print(f"  [2] Need more, searching similar keywords (symmetric, cap at 15)...")
-        # For Tier 2, we use a RAW embedding (no instruction) to match the keyword index
-        raw_query_embedding = embed_text(query_lower, use_instruction=False)
+        raw_query_embedding = embed_text(query_lower)
         similar_keywords = search_keywords(raw_query_embedding, TOP_K_KEYWORDS)
         print(f"  [KEYWORDS] Found {len(similar_keywords)} similar keywords:")
         for kw, kw_score in similar_keywords:
@@ -318,6 +319,75 @@ def search_poems(query, top_n=TARGET_RESULTS):
                     )
 
         print(f"  [RESULT] Total: {len(results)} poems after keyword expansion")
+
+    # Step 3: Adaptive fallback - if still 0 results, relax thresholds
+    if len(results) == 0:
+        print(f"  [3] Zero results! Applying adaptive fallback...")
+
+        # 3a. Relax semantic threshold
+        relaxed_matches = search_poems_by_embedding(
+            query_embedding, threshold=0.3, limit=5
+        )
+        for poem_idx, score, match_type in relaxed_matches:
+            if poem_idx not in seen_poem_indices:
+                seen_poem_indices.add(poem_idx)
+                poem = poems_data[poem_idx]
+                results.append(
+                    {
+                        "poem": poem["poem"],
+                        "meaning": poem.get("explanation", ""),
+                        "category": poem.get("category", ""),
+                        "keywords": poem.get("keywords", ""),
+                        "matched_keyword": f"{match_type} (gợi ý)",
+                        "score": score,
+                    }
+                )
+
+        print(f"  [RESULT] Total: {len(results)} poems after relaxed semantic search")
+
+        # 3b. Force-accept top keyword matches if still empty
+        if len(results) == 0 and similar_keywords:
+            print(f"  [3b] Still zero, force-accepting top keywords...")
+            for kw, kw_score in similar_keywords[:3]:
+                poem_matches = search_poems_by_keyword_literal(kw, 5 - len(results))
+                for poem_idx, score, match_type in poem_matches:
+                    if poem_idx not in seen_poem_indices:
+                        seen_poem_indices.add(poem_idx)
+                        poem = poems_data[poem_idx]
+                        results.append(
+                            {
+                                "poem": poem["poem"],
+                                "meaning": poem.get("explanation", ""),
+                                "category": poem.get("category", ""),
+                                "keywords": poem.get("keywords", ""),
+                                "matched_keyword": f"{match_type} (gợi ý)",
+                                "score": kw_score,
+                            }
+                        )
+                if len(results) >= 5:
+                    break
+
+            print(f"  [RESULT] Total: {len(results)} poems after forced keyword fallback")
+
+    # Step 4: Literal search as absolute last resort
+    if len(results) == 0:
+        print(f"  [4] Absolute fallback: literal substring search...")
+        literal_matches = search_poems_literal(query_lower, 5)
+        for poem_idx, score in literal_matches:
+            if poem_idx not in seen_poem_indices:
+                seen_poem_indices.add(poem_idx)
+                poem = poems_data[poem_idx]
+                results.append(
+                    {
+                        "poem": poem["poem"],
+                        "meaning": poem.get("explanation", ""),
+                        "category": poem.get("category", ""),
+                        "keywords": poem.get("keywords", ""),
+                        "matched_keyword": "Tìm theo văn bản",
+                        "score": score,
+                    }
+                )
+        print(f"  [RESULT] Total: {len(results)} poems after literal search")
 
     print(f"\n[FINAL] Returning {len(results)} poems")
     return results[:top_n]
