@@ -113,7 +113,7 @@ def main():
     # Step 2: Create keyword embeddings
     print("\n[2/2] Creating keyword embeddings...")
     keywords_list = sorted(list(all_keywords))
-    keywords_to_embed = [kw for kw in keywords_list]
+    keywords_to_embed = list(keywords_list)
     keyword_embeddings = create_embeddings(keywords_to_embed, "keywords")
     keyword_embeddings = normalize(keyword_embeddings, norm="l2")
 
