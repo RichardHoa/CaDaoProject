@@ -23,7 +23,7 @@ APOLLO_URL = "https://apollo.quocanmeomeo.io.vn"
 # Initialize Ollama Client
 client = ollama.Client(host=APOLLO_URL, headers={'Authorization': f'Bearer {APOLLO_API_KEY}'})
 
-INPUT_CSV = "output.csv"
+INPUT_CSV = "extractions/wiki.csv"
 EMBEDDINGS_FILE = "embeddings.pkl"
 KEYWORDS_FILE = "keywords.pkl"
 EMBEDDING_MODEL = "qwen3-embedding:8b"
@@ -70,7 +70,7 @@ def main():
     print(f"--- Bước 2: Xây dựng cơ sở dữ liệu embedding ---")
 
     # Load extracted data
-    print("Loading output.csv...")
+    print(f"Loading {INPUT_CSV}...")
     df = pd.read_csv(INPUT_CSV, dtype=str).fillna("")
 
     # Prepare poems data
@@ -78,15 +78,23 @@ def main():
     all_keywords = set()
 
     for index, row in df.iterrows():
-        poem = str(row.get("Poem", "")).strip()
-        meaning = str(row.get("Meaning", "")).strip()
-        keywords_str = str(row.get("Keywords", "")).strip()
+        poem = str(row.get("poem", "")).strip()
+        meaning = str(row.get("searchable_explanation", "")).strip()
+        keywords_str = str(row.get("keywords", "")).strip()
+        explanation = str(row.get("explanation", "")).strip()
+        category = str(row.get("category", "")).strip()
 
         # Skip poems with missing components (meaning or keywords)
         if not poem or not meaning or not keywords_str:
             continue
 
-        poems_data.append({"poem": poem, "meaning": meaning, "keywords": keywords_str})
+        poems_data.append({
+            "poem": poem,
+            "meaning": meaning,
+            "explanation": explanation,
+            "category": category,
+            "keywords": keywords_str
+        })
 
         # Collect unique keywords
         if keywords_str:
