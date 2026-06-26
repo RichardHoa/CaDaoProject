@@ -10,59 +10,29 @@ import time
 import pandas as pd
 import numpy as np
 import faiss
-import ollama
 import os
 from dotenv import load_dotenv
 from sklearn.preprocessing import normalize
+from sentence_transformers import SentenceTransformer
 
-# Load API key
-load_dotenv()
-APOLLO_API_KEY = os.getenv("APOLLO_API_KEY")
-APOLLO_URL = "https://apollo.quocanmeomeo.io.vn"
-
-# Initialize Ollama Client
-client = ollama.Client(host=APOLLO_URL, headers={'Authorization': f'Bearer {APOLLO_API_KEY}'})
+# Initialize SentenceTransformer Model
+print("Loading SentenceTransformer model 'AITeamVN/Vietnamese_Embedding'...")
+embedding_model = SentenceTransformer("AITeamVN/Vietnamese_Embedding")
 
 INPUT_CSV = "extractions/wiki.csv"
 EMBEDDINGS_FILE = "embeddings.pkl"
 KEYWORDS_FILE = "keywords.pkl"
-EMBEDDING_MODEL = "qwen3-embedding:8b"
 
 
 def create_embeddings(texts, label="items"):
     print(f"Creating embeddings for {len(texts)} {label}...")
-    embeddings = []
     
     if not texts:
         # Return an empty array with 2 dimensions if no texts provided
         return np.array([], dtype=np.float32).reshape(0, 0)
 
-    for i, text in enumerate(texts):
-        if i % 50 == 0:
-            print(f"  [{i}/{len(texts)}] {label}...")
-
-        # Skip empty text just in case (should be filtered by caller)
-        if not text or not text.strip():
-            continue
-
-        # Infinite retry loop
-        while True:
-            try:
-                response = client.embeddings(model=EMBEDDING_MODEL, prompt=text)
-                vector = response["embedding"]
-                
-                # Check for inconsistent dimensions
-                if embeddings and len(vector) != len(embeddings[0]):
-                    raise ValueError(f"Inconsistent embedding dimension at index {i}. Expected {len(embeddings[0])}, got {len(vector)}. This will break indices.")
-
-                embeddings.append(vector)
-                break  # Success! Exit the while loop and move to the next text
-            except Exception as e:
-                print(
-                    f"  [WARN] Failed to embed '{text[:30]}': {e}. Retrying in 2 seconds..."
-                )
-                time.sleep(2)  # Wait before trying again
-
+    # Generate embeddings in batch
+    embeddings = embedding_model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
     return np.array(embeddings, dtype=np.float32)
 
 
