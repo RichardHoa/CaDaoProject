@@ -49,6 +49,7 @@ def log_request(response):
 EMBEDDINGS_FILE = "embeddings.pkl"
 KEYWORDS_FILE = "keywords.pkl"
 SIMILARITY_THRESHOLD = 0.6
+KEYWORD_SIMILARITY_THRESHOLD = 0.7
 TARGET_RESULTS = 20
 TOP_K_KEYWORDS = 5
 LEARNING_DATA_FILE = "data/learning_data.json"
@@ -285,11 +286,17 @@ def search_poems(query, top_n=TARGET_RESULTS):
         # For Tier 2, we use a RAW embedding (no instruction) to match the keyword index
         raw_query_embedding = embed_text(query_lower, use_instruction=False)
         similar_keywords = search_keywords(raw_query_embedding, TOP_K_KEYWORDS)
-        print(f"  [KEYWORDS] Found {len(similar_keywords)} similar keywords")
+        print(f"  [KEYWORDS] Found {len(similar_keywords)} similar keywords:")
+        for kw, kw_score in similar_keywords:
+            print(f"    - '{kw}' (similarity: {kw_score:.4f})")
 
         for kw, kw_score in similar_keywords:
             if len(results) >= 15:
                 break
+
+            if kw_score < KEYWORD_SIMILARITY_THRESHOLD:
+                print(f"  [2.x] Skipping keyword '{kw}' (similarity: {kw_score:.2f} < {KEYWORD_SIMILARITY_THRESHOLD})")
+                continue
 
             print(f"  [2.x] Searching with keyword '{kw}' (similarity: {kw_score:.2f})...")
             # USE LITERAL LOOKUP FOR KEYWORDS
@@ -652,7 +659,7 @@ load_data()
 
 def main():
     """Initialize and run the server"""
-    app.run(host="0.0.0.0", port=4001, debug=True)
+    app.run(host="0.0.0.0", port=4000, debug=True)
 
 if __name__ == "__main__":
     main()
