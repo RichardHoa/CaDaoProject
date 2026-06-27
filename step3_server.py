@@ -170,60 +170,7 @@ VIETNAMESE_STOP_WORDS = {
 }
 
 
-def decompose_query_for_keywords(query):
-    """
-    Break a multi-word query into meaningful segments for keyword matching.
-    Returns a list of segments (unigrams and bigrams) plus the full query.
-    
-    For example: "sự tích cực trong nghịch cảnh"
-    -> ['tích cực', 'nghịch cảnh', 'tích', 'cực', 'nghịch', 'cảnh',
-        'tích cực trong nghịch cảnh']
-    """
-    words = query.lower().strip().split()
-    # Filter stop words and single-character words
-    meaningful = [w for w in words if w not in VIETNAMESE_STOP_WORDS and len(w) > 1]
 
-    segments = set()
-    # Add individual words
-    for w in meaningful:
-        segments.add(w)
-
-    # Add bigrams from meaningful words (Vietnamese compound words are often 2 syllables)
-    for i in range(len(meaningful) - 1):
-        segments.add(f"{meaningful[i]} {meaningful[i+1]}")
-
-    # Always include the full query as one segment too
-    segments.add(query.lower().strip())
-
-    return list(segments)
-
-
-def search_keywords_decomposed(query, top_k=TOP_K_KEYWORDS):
-    """
-    Search keywords using query decomposition for better matching.
-    
-    Instead of embedding the full query as one piece and comparing against
-    short keywords (which gives weak scores due to semantic scale mismatch),
-    this splits the query into meaningful segments and searches keywords
-    with each segment. This produces keyword-to-keyword comparisons with
-    much higher and more accurate similarity scores.
-    
-    Returns deduplicated list of (keyword, best_score) sorted by score desc.
-    """
-    segments = decompose_query_for_keywords(query)
-
-    keyword_scores = {}  # keyword -> best score across all segments
-
-    for segment in segments:
-        seg_embedding = embed_text(segment)
-        results = search_keywords(seg_embedding, top_k)
-        for kw, score in results:
-            if kw not in keyword_scores or score > keyword_scores[kw]:
-                keyword_scores[kw] = score
-
-    # Sort by score descending and return top_k
-    sorted_results = sorted(keyword_scores.items(), key=lambda x: x[1], reverse=True)
-    return sorted_results[:top_k]
 
 
 def search_poems_by_embedding(
@@ -344,50 +291,30 @@ def search_poems(query, top_n=TARGET_RESULTS):
 
     print(f"  [RESULT] Found {len(candidate_poems)} candidate poems after original semantic search")
 
-    # Step 2: Decomposed Semantic Search
-    segments = decompose_query_for_keywords(query_lower)
-    segments = [s for s in segments if s != query_lower]
-
-    if segments:
-        print(f"  [2] Decomposed semantic search with {len(segments)} sub-terms: {segments}")
-        for segment in segments:
-            seg_embedding = embed_text(segment)
-            seg_matches = search_poems_by_embedding(
-                seg_embedding, DECOMPOSED_SIMILARITY_THRESHOLD, limit=20
-            )
-            added = 0
-            for poem_idx, score, match_type in seg_matches:
-                add_candidate(poem_idx, score, f"{match_type} ({segment})")
-                added += 1
-            if added > 0:
-                print(f"    - '{segment}' contributed to {added} poems")
-
-        print(f"  [RESULT] Total unique candidates: {len(candidate_poems)} after decomposed semantic search")
-
-    # Step 3: Keyword Expansion + Literal Lookup
-    print(f"  [3] Searching similar keywords (strict threshold {KEYWORD_SIMILARITY_THRESHOLD})...")
-    similar_keywords = search_keywords_decomposed(query_lower, TOP_K_KEYWORDS)
+    # Step 2: Keyword Expansion + Literal Lookup
+    print(f"  [2] Searching similar keywords (strict threshold {KEYWORD_SIMILARITY_THRESHOLD})...")
+    similar_keywords = search_keywords(query_embedding, TOP_K_KEYWORDS)
     print(f"  [KEYWORDS] Found {len(similar_keywords)} similar keywords:")
     for kw, kw_score in similar_keywords:
         print(f"    - '{kw}' (similarity: {kw_score:.4f})")
 
     for kw, kw_score in similar_keywords:
         if kw_score < KEYWORD_SIMILARITY_THRESHOLD:
-            print(f"  [3.x] Skipping keyword '{kw}' (similarity: {kw_score:.2f} < {KEYWORD_SIMILARITY_THRESHOLD})")
+            print(f"  [2.x] Skipping keyword '{kw}' (similarity: {kw_score:.2f} < {KEYWORD_SIMILARITY_THRESHOLD})")
             continue
 
-        print(f"  [3.x] Searching with keyword '{kw}' (similarity: {kw_score:.2f})...")
+        print(f"  [2.x] Searching with keyword '{kw}' (similarity: {kw_score:.2f})...")
         kw_matches = search_poems_by_keyword_literal(kw, 20)
         for poem_idx, score, match_type in kw_matches:
             add_candidate(poem_idx, kw_score, match_type)
 
     print(f"  [RESULT] Total unique candidates: {len(candidate_poems)} after keyword expansion")
 
-    # Step 4: Adaptive fallback - if still 0 results, relax thresholds
+    # Step 3: Adaptive fallback - if still 0 results, relax thresholds
     if len(candidate_poems) == 0:
-        print(f"  [4] Zero results! Applying adaptive fallback...")
+        print(f"  [3] Zero results! Applying adaptive fallback...")
 
-        # 4a. Relax semantic threshold
+        # 3a. Relax semantic threshold
         relaxed_matches = search_poems_by_embedding(
             query_embedding, threshold=0.25, limit=10
         )
@@ -396,9 +323,9 @@ def search_poems(query, top_n=TARGET_RESULTS):
 
         print(f"  [RESULT] Total unique candidates: {len(candidate_poems)} after relaxed semantic search")
 
-        # 4b. Force-accept top keyword matches if still empty
+        # 3b. Force-accept top keyword matches if still empty
         if len(candidate_poems) == 0 and similar_keywords:
-            print(f"  [4b] Still zero, force-accepting top keywords...")
+            print(f"  [3b] Still zero, force-accepting top keywords...")
             for kw, kw_score in similar_keywords[:3]:
                 kw_matches = search_poems_by_keyword_literal(kw, 5)
                 for poem_idx, score, match_type in kw_matches:
@@ -406,9 +333,9 @@ def search_poems(query, top_n=TARGET_RESULTS):
 
             print(f"  [RESULT] Total unique candidates: {len(candidate_poems)} after forced keyword fallback")
 
-    # Step 5: Literal search as absolute last resort
+    # Step 4: Literal search as absolute last resort
     if len(candidate_poems) == 0:
-        print(f"  [5] Absolute fallback: literal substring search...")
+        print(f"  [4] Absolute fallback: literal substring search...")
         literal_matches = search_poems_literal(query_lower, 10)
         for poem_idx, score in literal_matches:
             add_candidate(poem_idx, score, "Tìm theo văn bản")
