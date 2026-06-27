@@ -49,7 +49,7 @@ def log_request(response):
 EMBEDDINGS_FILE = "embeddings.pkl"
 KEYWORDS_FILE = "keywords.pkl"
 SIMILARITY_THRESHOLD = 0.45
-KEYWORD_SIMILARITY_THRESHOLD = 0.55
+KEYWORD_SIMILARITY_THRESHOLD = 0.70
 TARGET_RESULTS = 20
 TOP_K_KEYWORDS = 10
 LEARNING_DATA_FILE = "data/learning_data.json"
@@ -313,8 +313,10 @@ def search_poems(query, top_n=TARGET_RESULTS):
     """
     Main search function follows a semantic-first pipeline:
     1. Semantic Match (Original Query) - Direct vector matching
-    2. AI Expansion Search (Deep Semantic) - Using LLM to expand query
-    3. Keyword Expansion + Literal Lookup (High-precision fallback)
+    2. Decomposed Semantic Search - Search poems with each sub-term directly
+    3. Keyword Expansion + Literal Lookup (Strict threshold, high-precision)
+    4. Adaptive Fallback - For zero-result cases
+    5. Literal Search - Absolute last resort
     """
     query_lower = query.lower().strip()
     seen_poem_indices = set()
@@ -326,7 +328,6 @@ def search_poems(query, top_n=TARGET_RESULTS):
     if len(results) < 15:
         print(f"  [1] Searching poems semantically with '{query_lower}'...")
         query_embedding = embed_text(query_lower)
-        # Cap at 15 as requested
         poem_matches = search_poems_by_embedding(
             query_embedding, SIMILARITY_THRESHOLD, 15 - len(results)
         )
@@ -348,10 +349,53 @@ def search_poems(query, top_n=TARGET_RESULTS):
 
         print(f"  [RESULT] Total: {len(results)} poems after original semantic search")
 
-    # Step 2: Keyword Expansion + Literal Lookup (Symmetric Matching)
+    # Step 2: Decomposed Semantic Search
+    # Instead of searching a small keyword vocabulary (bottleneck),
+    # decompose the query into sub-terms and search the poem index directly
+    # with each one. This finds poems matching each sub-concept.
+    if len(results) < 15:
+        segments = decompose_query_for_keywords(query_lower)
+        # Remove the full query since Step 1 already searched with it
+        segments = [s for s in segments if s != query_lower]
+
+        if segments:
+            print(f"  [2] Decomposed semantic search with {len(segments)} sub-terms: {segments}")
+
+            for segment in segments:
+                if len(results) >= 15:
+                    break
+                seg_embedding = embed_text(segment)
+                poem_matches = search_poems_by_embedding(
+                    seg_embedding, SIMILARITY_THRESHOLD, 15 - len(results)
+                )
+
+                added = 0
+                for poem_idx, score, match_type in poem_matches:
+                    if poem_idx not in seen_poem_indices:
+                        seen_poem_indices.add(poem_idx)
+                        poem = poems_data[poem_idx]
+                        results.append(
+                            {
+                                "poem": poem["poem"],
+                                "meaning": poem.get("explanation", ""),
+                                "category": poem.get("category", ""),
+                                "keywords": poem.get("keywords", ""),
+                                "matched_keyword": f"{match_type} ({segment})",
+                                "score": score,
+                            }
+                        )
+                        added += 1
+
+                if added > 0:
+                    print(f"    - '{segment}' added {added} poems")
+
+            print(f"  [RESULT] Total: {len(results)} poems after decomposed semantic search")
+
+    # Step 3: Keyword Expansion + Literal Lookup (Strict threshold)
+    # Only accept keywords with high confidence (>=0.70) to avoid noise
     similar_keywords = []  # Store for potential use in fallback
     if len(results) < 15:
-        print(f"  [2] Need more, searching similar keywords (decomposed, cap at 15)...")
+        print(f"  [3] Searching similar keywords (strict threshold 0.70)...")
         similar_keywords = search_keywords_decomposed(query_lower, TOP_K_KEYWORDS)
         print(f"  [KEYWORDS] Found {len(similar_keywords)} similar keywords:")
         for kw, kw_score in similar_keywords:
@@ -362,11 +406,10 @@ def search_poems(query, top_n=TARGET_RESULTS):
                 break
 
             if kw_score < KEYWORD_SIMILARITY_THRESHOLD:
-                print(f"  [2.x] Skipping keyword '{kw}' (similarity: {kw_score:.2f} < {KEYWORD_SIMILARITY_THRESHOLD})")
+                print(f"  [3.x] Skipping keyword '{kw}' (similarity: {kw_score:.2f} < {KEYWORD_SIMILARITY_THRESHOLD})")
                 continue
 
-            print(f"  [2.x] Searching with keyword '{kw}' (similarity: {kw_score:.2f})...")
-            # USE LITERAL LOOKUP FOR KEYWORDS
+            print(f"  [3.x] Searching with keyword '{kw}' (similarity: {kw_score:.2f})...")
             poem_matches = search_poems_by_keyword_literal(kw, 15 - len(results))
 
             for poem_idx, score, match_type in poem_matches:
@@ -386,11 +429,11 @@ def search_poems(query, top_n=TARGET_RESULTS):
 
         print(f"  [RESULT] Total: {len(results)} poems after keyword expansion")
 
-    # Step 3: Adaptive fallback - if still 0 results, relax thresholds
+    # Step 4: Adaptive fallback - if still 0 results, relax thresholds
     if len(results) == 0:
-        print(f"  [3] Zero results! Applying adaptive fallback...")
+        print(f"  [4] Zero results! Applying adaptive fallback...")
 
-        # 3a. Relax semantic threshold
+        # 4a. Relax semantic threshold
         relaxed_matches = search_poems_by_embedding(
             query_embedding, threshold=0.3, limit=5
         )
@@ -411,9 +454,9 @@ def search_poems(query, top_n=TARGET_RESULTS):
 
         print(f"  [RESULT] Total: {len(results)} poems after relaxed semantic search")
 
-        # 3b. Force-accept top keyword matches if still empty
+        # 4b. Force-accept top keyword matches if still empty
         if len(results) == 0 and similar_keywords:
-            print(f"  [3b] Still zero, force-accepting top keywords...")
+            print(f"  [4b] Still zero, force-accepting top keywords...")
             for kw, kw_score in similar_keywords[:3]:
                 poem_matches = search_poems_by_keyword_literal(kw, 5 - len(results))
                 for poem_idx, score, match_type in poem_matches:
@@ -435,9 +478,9 @@ def search_poems(query, top_n=TARGET_RESULTS):
 
             print(f"  [RESULT] Total: {len(results)} poems after forced keyword fallback")
 
-    # Step 4: Literal search as absolute last resort
+    # Step 5: Literal search as absolute last resort
     if len(results) == 0:
-        print(f"  [4] Absolute fallback: literal substring search...")
+        print(f"  [5] Absolute fallback: literal substring search...")
         literal_matches = search_poems_literal(query_lower, 5)
         for poem_idx, score in literal_matches:
             if poem_idx not in seen_poem_indices:
