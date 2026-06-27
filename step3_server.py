@@ -49,6 +49,7 @@ def log_request(response):
 EMBEDDINGS_FILE = "embeddings.pkl"
 KEYWORDS_FILE = "keywords.pkl"
 SIMILARITY_THRESHOLD = 0.45
+DECOMPOSED_SIMILARITY_THRESHOLD = 0.55
 KEYWORD_SIMILARITY_THRESHOLD = 0.70
 TARGET_RESULTS = 20
 TOP_K_KEYWORDS = 10
@@ -366,7 +367,7 @@ def search_poems(query, top_n=TARGET_RESULTS):
                     break
                 seg_embedding = embed_text(segment)
                 poem_matches = search_poems_by_embedding(
-                    seg_embedding, SIMILARITY_THRESHOLD, 15 - len(results)
+                    seg_embedding, DECOMPOSED_SIMILARITY_THRESHOLD, 15 - len(results)
                 )
 
                 added = 0
