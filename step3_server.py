@@ -51,7 +51,7 @@ KEYWORDS_FILE = "keywords.pkl"
 SIMILARITY_THRESHOLD = 0.45
 KEYWORD_SIMILARITY_THRESHOLD = 0.55
 TARGET_RESULTS = 20
-TOP_K_KEYWORDS = 5
+TOP_K_KEYWORDS = 10
 LEARNING_DATA_FILE = "data/learning_data.json"
 INTERPRETATIONS_FILE = "data/user_interpretations.txt"
 ADVICE_FILE = "advice.csv"
@@ -156,6 +156,73 @@ def search_keywords(query_embedding, top_k=TOP_K_KEYWORDS):
             results.append((keywords_list[idx], float(scores[0][i])))
 
     return results
+
+
+# Vietnamese stop words for query decomposition
+VIETNAMESE_STOP_WORDS = {
+    'của', 'và', 'là', 'các', 'có', 'được', 'trong', 'cho', 'với',
+    'này', 'đã', 'từ', 'một', 'những', 'để', 'về', 'như', 'không',
+    'khi', 'thì', 'sẽ', 'còn', 'đến', 'cũng', 'theo', 'trên',
+    'sau', 'nếu', 'tại', 'bị', 'nên', 'vì', 'hay', 'đây', 'do',
+    'lại', 'mà', 'ra', 'rất', 'đó', 'vào', 'sự', 'nhiều', 'qua',
+    'ai', 'gì', 'nào', 'đều', 'mỗi', 'hơn', 'rồi', 'lên', 'xuống',
+}
+
+
+def decompose_query_for_keywords(query):
+    """
+    Break a multi-word query into meaningful segments for keyword matching.
+    Returns a list of segments (unigrams and bigrams) plus the full query.
+    
+    For example: "sự tích cực trong nghịch cảnh"
+    -> ['tích cực', 'nghịch cảnh', 'tích', 'cực', 'nghịch', 'cảnh',
+        'tích cực trong nghịch cảnh']
+    """
+    words = query.lower().strip().split()
+    # Filter stop words and single-character words
+    meaningful = [w for w in words if w not in VIETNAMESE_STOP_WORDS and len(w) > 1]
+
+    segments = set()
+    # Add individual words
+    for w in meaningful:
+        segments.add(w)
+
+    # Add bigrams from meaningful words (Vietnamese compound words are often 2 syllables)
+    for i in range(len(meaningful) - 1):
+        segments.add(f"{meaningful[i]} {meaningful[i+1]}")
+
+    # Always include the full query as one segment too
+    segments.add(query.lower().strip())
+
+    return list(segments)
+
+
+def search_keywords_decomposed(query, top_k=TOP_K_KEYWORDS):
+    """
+    Search keywords using query decomposition for better matching.
+    
+    Instead of embedding the full query as one piece and comparing against
+    short keywords (which gives weak scores due to semantic scale mismatch),
+    this splits the query into meaningful segments and searches keywords
+    with each segment. This produces keyword-to-keyword comparisons with
+    much higher and more accurate similarity scores.
+    
+    Returns deduplicated list of (keyword, best_score) sorted by score desc.
+    """
+    segments = decompose_query_for_keywords(query)
+
+    keyword_scores = {}  # keyword -> best score across all segments
+
+    for segment in segments:
+        seg_embedding = embed_text(segment)
+        results = search_keywords(seg_embedding, top_k)
+        for kw, score in results:
+            if kw not in keyword_scores or score > keyword_scores[kw]:
+                keyword_scores[kw] = score
+
+    # Sort by score descending and return top_k
+    sorted_results = sorted(keyword_scores.items(), key=lambda x: x[1], reverse=True)
+    return sorted_results[:top_k]
 
 
 def search_poems_by_embedding(
@@ -284,9 +351,8 @@ def search_poems(query, top_n=TARGET_RESULTS):
     # Step 2: Keyword Expansion + Literal Lookup (Symmetric Matching)
     similar_keywords = []  # Store for potential use in fallback
     if len(results) < 15:
-        print(f"  [2] Need more, searching similar keywords (symmetric, cap at 15)...")
-        raw_query_embedding = embed_text(query_lower)
-        similar_keywords = search_keywords(raw_query_embedding, TOP_K_KEYWORDS)
+        print(f"  [2] Need more, searching similar keywords (decomposed, cap at 15)...")
+        similar_keywords = search_keywords_decomposed(query_lower, TOP_K_KEYWORDS)
         print(f"  [KEYWORDS] Found {len(similar_keywords)} similar keywords:")
         for kw, kw_score in similar_keywords:
             print(f"    - '{kw}' (similarity: {kw_score:.4f})")
