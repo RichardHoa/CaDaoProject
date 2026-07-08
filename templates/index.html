@@ -1,308 +1,58 @@
-{% extends "base.html" %} {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}" />
-{% endblock %} {% block content %}
-<section class="intro-section">
-  <h1>{{ t.index_title }}</h1>
+{% extends "base.html" %}
 
-  <div class="cadao-explanation-container">
-    <div class="cadao-explanation">
-      <h2>{{ t.what_is_cadao_title }}</h2>
-      <p class="explanation-text">{{ t.what_is_cadao_desc }}</p>
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+{% endblock %}
 
-      <div class="cadao-quote-box">
-        <blockquote class="cadao-quote">
-          <p class="quote-body">"{{ t.cadao_quote_text }}"</p>
-          <cite class="quote-cite">{{ t.cadao_quote_source }}</cite>
-        </blockquote>
-      </div>
-    </div>
-  </div>
-
-  <p class="intro-subtitle">
-    {{ t.index_subtitle }}
-  </p>
-  <div class="cards-container">
-    <div class="card search-card">
-      <h2>{{ t.search_card_title }}</h2>
-      <p>
-        {{ t.search_card_desc }}
-      </p>
-      <a href="/search-page" class="card-btn">{{ t.search_card_btn }}</a>
-    </div>
-
-    <div class="card wiki-card-landing">
-      <h2>{{ t.wiki_card_title }}</h2>
-      <p>
-        {{ t.wiki_card_desc }}
-      </p>
-      <a href="/wiki-page" class="card-btn">{{ t.wiki_card_btn }}</a>
+{% block content %}
+<section class="search-section">
+    <h1 class="search-header-title">Từ điển & Tìm kiếm Thành Ngữ, Tục Ngữ, Ca Dao Việt Nam</h1>
+    
+    <div class="search-bar-wrapper">
+        <div class="search-container">
+            <div class="category-select-wrapper">
+                <select id="categorySelect" aria-label="Phân loại">
+                    <option value="All">Tất cả phân loại</option>
+                    <option value="(CA DAO)">(CA DAO)</option>
+                    <option value="(THÀNH NGỮ)">(THÀNH NGỮ)</option>
+                    <option value="(TỤC NGỮ)">(TỤC NGỮ)</option>
+                    <option value="(THÀNH NGỮ HÁN VIỆT)">(THÀNH NGỮ HÁN VIỆT)</option>
+                    <option value="(TỤC NGỮ HÁN VIỆT)">(TỤC NGỮ HÁN VIỆT)</option>
+                </select>
+            </div>
+            <div class="separator-line"></div>
+            <input type="text" id="searchInput" placeholder="{{ t.search_placeholder }}" autocomplete="off">
+            <button id="searchBtn" aria-label="Tìm kiếm">
+                <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+            </button>
+        </div>
     </div>
 
-    <div class="card learning-card">
-      <h2>{{ t.learning_card_title }}</h2>
-      <p>
-        {{ t.learning_card_desc }}
-      </p>
-      <a href="/learning-page" class="card-btn">{{ t.learning_card_btn }}</a>
+    <div class="example-questions">
+        <span class="example-title" id="suggested-label">{{ t.suggested_searches }}</span>
+        <div class="example-list" role="group" aria-labelledby="suggested-label">
+            <button type="button" class="example-btn">Tình yêu nam nữ</button>
+            <button type="button" class="example-btn">Quan niệm về hôn nhân</button>
+            <button type="button" class="example-btn">Châm biếm hài hước</button>
+            <button type="button" class="example-btn">Sự hờn dõi ghen tuông</button>
+            <button type="button" class="example-btn">Sự cần cù, nhẫn nại</button>
+            <button type="button" class="example-btn">Sự hiếu thảo</button>
+            <button type="button" class="example-btn">Quan niệm về cái đẹp</button>
+            <button type="button" class="example-btn">Phê phán những người lười biếng</button>
+            <button type="button" class="example-btn">Sự tích cực trong nghịch cảnh</button>
+            <button type="button" class="example-btn">Mối quan hệ giữa người</button>
+        </div>
     </div>
 
-    <!-- Temporarily hide Q&A card
-    <div class="card search-card">
-      <h2>{{ t.qa_card_title }}</h2>
-      <p>
-        {{ t.qa_card_desc }}
-      </p>
-      <a href="/qa-page" class="card-btn">{{ t.qa_card_btn }}</a>
+    <div class="results" id="results" aria-live="polite">
+        <div class="no-results">{{ t.search_initial }}</div>
     </div>
-    -->
-  </div>
-</section>
-
-<!-- Folk Lore Knowledge Explorer Section -->
-<section class="explorer-section">
-  <h2 class="explorer-section-title">{{ t.explorer_title }}</h2>
-  <p class="explorer-section-subtitle">{{ t.explorer_subtitle }}</p>
-
-  <!-- Tabs Navigation -->
-  <div class="explorer-tabs">
-    <button class="tab-btn active" onclick="switchTab(event, 'tab-proverbs')">{{ t.tab_proverbs_idioms }}</button>
-    <button class="tab-btn" onclick="switchTab(event, 'tab-poetry')">{{ t.tab_poetry_songs }}</button>
-    <button class="tab-btn" onclick="switchTab(event, 'tab-characteristics')">{{ t.tab_characteristics }}</button>
-  </div>
-
-  <!-- Tab Panels -->
-  <div class="explorer-panels">
-
-    <!-- Tab 1: Proverbs & Idioms -->
-    <div id="tab-proverbs" class="tab-panel active">
-      <div class="panel-header">
-        <h3>{{ t.proverbs_intro_title }}</h3>
-        <p>{{ t.proverbs_intro_desc }}</p>
-      </div>
-
-      <div class="definition-stack">
-        <div class="def-card proverb-def">
-          <h4>{{ t.proverb_def_title }}</h4>
-          <p>{{ t.proverb_def_body }}</p>
-        </div>
-        <div class="def-card idiom-def">
-          <h4>{{ t.idiom_def_title }}</h4>
-          <p>{{ t.idiom_def_body }}</p>
-        </div>
-      </div>
-
-      <h4 class="interactive-title">{{ t.interactive_flip_title }}</h4>
-      <div class="examples-stack">
-        <!-- Card 1 (Proverb) -->
-        <details class="example-card">
-          <summary class="example-summary">
-            <div class="summary-left">
-              <span class="card-type type-proverb">Tục ngữ</span>
-              <h5>Chó cắn áo rách</h5>
-            </div>
-            <span class="expand-icon"></span>
-          </summary>
-          <div class="example-content">
-            <h5>{{ t.example_proverb_1_title }}</h5>
-            <p>{{ t.example_proverb_1_desc }}</p>
-          </div>
-        </details>
-
-        <!-- Card 2 (Idiom) -->
-        <details class="example-card">
-          <summary class="example-summary">
-            <div class="summary-left">
-              <span class="card-type type-proverb">Tục ngữ</span>
-              <h5>Bệnh quỷ, thuốc tiên</h5>
-            </div>
-            <span class="expand-icon"></span>
-          </summary>
-          <div class="example-content">
-            <h5>{{ t.example_proverb_2_title }}</h5>
-            <p>{{ t.example_proverb_2_desc }}</p>
-          </div>
-        </details>
-
-
-        <details class="example-card">
-          <summary class="example-summary">
-            <div class="summary-left">
-              <span class="card-type type-idiom">Thành ngữ</span>
-              <h5>Áo rách, quần manh</h5>
-            </div>
-            <span class="expand-icon"></span>
-          </summary>
-          <div class="example-content">
-            <h5>{{ t.example_idiom_1_title }}</h5>
-            <p>{{ t.example_idiom_1_desc }}</p>
-          </div>
-        </details>
-
-        <!-- Card 3 (Proverb) -->
-
-
-        <!-- Card 4 (Idiom) -->
-        <details class="example-card">
-          <summary class="example-summary">
-            <div class="summary-left">
-              <span class="card-type type-idiom">Thành ngữ</span>
-              <h5>Dốt đặc cán mai</h5>
-            </div>
-            <span class="expand-icon"></span>
-          </summary>
-          <div class="example-content">
-            <h5>{{ t.example_idiom_2_title }}</h5>
-            <p>{{ t.example_idiom_2_desc }}</p>
-          </div>
-        </details>
-
-        <!-- Card 5 (Idiom) -->
-        <details class="example-card">
-          <summary class="example-summary">
-            <div class="summary-left">
-              <span class="card-type type-idiom">Thành ngữ</span>
-              <h5>Ăn trắng, mặc trơn</h5>
-            </div>
-            <span class="expand-icon"></span>
-          </summary>
-          <div class="example-content">
-            <h5>{{ t.example_idiom_3_title }}</h5>
-            <p>{{ t.example_idiom_3_desc }}</p>
-          </div>
-        </details>
-
-        <!-- Card 6 (Idiom) -->
-        <details class="example-card">
-          <summary class="example-summary">
-            <div class="summary-left">
-              <span class="card-type type-idiom">Thành ngữ</span>
-              <h5>Ăn trên, ngồi trốc</h5>
-            </div>
-            <span class="expand-icon"></span>
-          </summary>
-          <div class="example-content">
-            <h5>{{ t.example_idiom_4_title }}</h5>
-            <p>{{ t.example_idiom_4_desc }}</p>
-          </div>
-        </details>
-      </div>
-    </div>
-
-    <!-- Tab 2: Ca dao & Dân ca -->
-    <div id="tab-poetry" class="tab-panel">
-      <div class="panel-header">
-        <h3>{{ t.poetry_intro_title }}</h3>
-        <p>{{ t.poetry_intro_desc }}</p>
-      </div>
-
-      <div class="song-visualizer-container">
-        <div class="visualizer-intro">
-          <h4>{{ t.poetry_transition_title }}</h4>
-          <p>{{ t.poetry_transition_desc }}</p>
-        </div>
-
-        <div class="visualizer-output">
-          <!-- Example 1: Làm trai -->
-          <div class="song-pair-container">
-            <div class="original-box">
-              <span class="version-label">Bản gốc Ca dao (Văn học)</span>
-              <pre class="poem-text">Làm trai quyết chí tu thân,
-Công danh chớ vội, nợ nần chớ lo.
-Khi nên, trời giúp công cho,
-Làm trai năm liệu bảy lo mới hào.</pre>
-            </div>
-            <div class="song-box">
-              <span class="version-label">Bản hát Dân ca (Nhạc điệu)</span>
-              <div class="song-rendered">
-                Quyết chí <strong>mà</strong> tu thân <strong>ơ</strong>,<br>
-                Công danh <strong>là danh</strong> chớ vội <strong>chứ đã</strong> nợ nần...<br>
-                <strong>mà</strong> không lo,
-              </div>
-            </div>
-          </div>
-
-          <!-- Example 2: Trống cơm -->
-          <div class="song-pair-container">
-            <div class="original-box">
-              <span class="version-label">Bản gốc Ca dao (Văn học)</span>
-              <pre class="poem-text">Trống cơm khéo vỗ nên vông,
-Một bầy con sếu lội sông đi tìm.
-Thương ai con mắt lim dim,
-Một bầy con nhện đi tìm giăng tơ.
-Thương ai duyên nợ tang bồng...</pre>
-            </div>
-            <div class="song-box">
-              <span class="version-label">Bản hát Dân ca (Nhạc điệu)</span>
-              <div class="song-rendered">
-                <strong>(Tình bằng)</strong> có cái trống cơm, khen ai khéo vỗ <strong>(ấy mấy)</strong> vông nên vông
-                <strong>(ấy mấy)</strong> vông nên vông,<br>
-                Một bầy <strong>(tang tình)</strong> con sếu lội lội lội sông <strong>(ấy mấy)</strong> đi tìm.<br>
-                Em nhớ thương ai đôi con mắt <strong>(ấy mấy)</strong> lim dim...<br>
-                Một bầy <strong>(tang tình)</strong> con nhện <strong>(ì ới a, ấy mấy)</strong> giăng tơ, giăng tơ
-                <strong>(ấy mấy)</strong> đi tìm.<br>
-                Em nhớ thương ai, duyên nợ khách tang bồng...
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab 3: Cultural Properties -->
-    <div id="tab-characteristics" class="tab-panel">
-      <div class="panel-header">
-        <h3>{{ t.properties_title }}</h3>
-      </div>
-
-      <div class="properties-stack">
-        <div class="property-card">
-          <div class="prop-number">01</div>
-          <div class="prop-content">
-            <h4>{{ t.prop_collective_title }}</h4>
-            <p>{{ t.prop_collective_desc }}</p>
-          </div>
-        </div>
-        <div class="property-card">
-          <div class="prop-number">02</div>
-          <div class="prop-content">
-            <h4>{{ t.prop_oral_title }}</h4>
-            <p>{{ t.prop_oral_desc }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="academic-quotes">
-        <div class="quote-card">
-          <div class="quote-icon">“</div>
-          <h5>{{ t.quote_bogatyrev_title }}</h5>
-          <blockquote>{{ t.quote_bogatyrev_body }}</blockquote>
-        </div>
-
-        <div class="quote-card">
-          <div class="quote-icon">“</div>
-          <h5>{{ t.quote_chicherov_title }}</h5>
-          <blockquote>{{ t.quote_chicherov_body }}</blockquote>
-        </div>
-      </div>
-    </div>
-  </div>
 </section>
 {% endblock %}
 
 {% block script %}
-<script>
-  function switchTab(evt, tabId) {
-    // Hide all panels
-    const panels = document.querySelectorAll('.tab-panel');
-    panels.forEach(panel => panel.classList.remove('active'));
-
-    // Deactivate all tab buttons
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    tabBtns.forEach(btn => btn.classList.remove('active'));
-
-    // Show selected panel and set button active
-    document.getElementById(tabId).classList.add('active');
-    evt.currentTarget.classList.add('active');
-  }
-</script>
+<script src="{{ url_for('static', filename='js/search.js') }}"></script>
 {% endblock %}

@@ -6,17 +6,23 @@
 
 {% block content %}
 <section class="qa-section">
-    <h1>{{ t.qa_title }}</h1>
+    <h1 class="qa-header-title">Ca dao vấn đáp</h1>
     
-    <div class="qa-container">
-        <label for="concernInput" class="visually-hidden">{{ t.qa_placeholder }}</label>
-        <textarea 
-            id="concernInput" 
-            placeholder="{{ t.qa_placeholder }}" 
-            rows="4"
-            aria-required="true"
-        ></textarea>
-        <button id="qaBtn" aria-label="{{ t.qa_btn }}">{{ t.qa_btn }}</button>
+    <div class="qa-card-container">
+        <h2 class="qa-card-prompt">Hãy chia sẻ băn khoăn hoặc tâm sự của bạn tại đây</h2>
+        
+        <div class="qa-input-wrapper">
+            <textarea 
+                id="concernInput" 
+                placeholder="Tìm kiếm theo từ khoá..." 
+                rows="6"
+                aria-required="true"
+            ></textarea>
+        </div>
+        
+        <div class="qa-button-wrapper">
+            <button id="qaBtn" class="qa-submit-btn" aria-label="Xin lời khuyên">Xin lời khuyên</button>
+        </div>
     </div>
 
     <div id="qaLoading" class="qa-loading hidden">
@@ -25,7 +31,7 @@
     </div>
 
     <div id="qaResult" class="qa-result hidden" aria-live="polite">
-        <h2>{{ t.qa_result_title }}</h2>
+        <h2 class="result-header-title">{{ t.qa_result_title }}</h2>
         
         <div class="result-card">
             <div class="poem-display">
