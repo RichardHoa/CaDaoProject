@@ -46,25 +46,20 @@
 
     <nav class="main-nav">
       <ul>
-        <li><a href="/">{{ t.nav_intro }}</a></li>
-        <li><a href="/search-page">{{ t.nav_search }}</a></li>
-        <li><a href="/wiki-page">{{ t.nav_wiki }}</a></li>
-        <li><a href="/learning-page">{{ t.nav_learning }}</a></li>
-        <!-- <li><a href="/qa-page">{{ t.nav_qa }}</a></li> -->
-        <li class="lang-toggle-item">
-          <div class="lang-switch">
-            <button 
-              class="lang-btn {% if lang == 'vi' %}active{% endif %}" 
-              onclick="setLanguage('vi')"
-              aria-label="Tiếng Việt"
-              {% if lang == 'vi' %}disabled{% endif %}
-            >VI</button>
-            <button 
-              class="lang-btn {% if lang == 'en' %}active{% endif %}" 
-              onclick="setLanguage('en')"
-              aria-label="English"
-              {% if lang == 'en' %}disabled{% endif %}
-            >EN</button>
+        <li><a href="/">{{ t.nav_search }}</a></li>
+        <li><a href="/qa-page">{{ t.nav_qa }}</a></li>
+        <li class="lang-dropdown-item">
+          <div class="lang-dropdown">
+            <button class="lang-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="Select Language">
+              <span>{{ lang | upper }}</span>
+              <svg class="chevron-down-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <ul class="lang-dropdown-menu">
+              <li><button onclick="setLanguage('vi')">VI</button></li>
+              <li><button onclick="setLanguage('en')">EN</button></li>
+            </ul>
           </div>
         </li>
       </ul>

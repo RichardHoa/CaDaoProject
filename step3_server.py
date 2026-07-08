@@ -14,16 +14,25 @@ Frontend displays: poem, meaning, keywords, matched keyword, accuracy %
 import json
 import pickle
 import sqlite3
-import numpy as np
-import faiss
 import time
 import os
 import csv
 import random
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, render_template
-from sklearn.preprocessing import normalize
-from sentence_transformers import SentenceTransformer
+from flask import Flask, request, jsonify, render_template, redirect, url_for
+
+# Heavy ML dependencies are optional — allows the server to run
+# without transformers/faiss/numpy on lightweight dev machines.
+try:
+    import numpy as np
+    import faiss
+    from sklearn.preprocessing import normalize
+    from sentence_transformers import SentenceTransformer
+    SEARCH_AVAILABLE = True
+except ImportError as _import_err:
+    print(f"WARNING: ML dependencies not available ({_import_err}).")
+    print("Search functionality will be disabled. All other features remain active.")
+    SEARCH_AVAILABLE = False
 
 # Load environment
 load_dotenv()
@@ -57,9 +66,13 @@ LEARNING_DATA_FILE = "data/learning_data.json"
 INTERPRETATIONS_FILE = "data/user_interpretations.txt"
 ADVICE_FILE = "advice.csv"
 
-# Initialize SentenceTransformer Model
-print("Loading SentenceTransformer model 'AITeamVN/Vietnamese_Embedding'...")
-embedding_model = SentenceTransformer("AITeamVN/Vietnamese_Embedding")
+# Initialize SentenceTransformer Model (only when ML libs are available)
+embedding_model = None
+if SEARCH_AVAILABLE:
+    print("Loading SentenceTransformer model 'AITeamVN/Vietnamese_Embedding'...")
+    embedding_model = SentenceTransformer("AITeamVN/Vietnamese_Embedding")
+else:
+    print("Skipping model load — search is disabled.")
 
 # Global data
 DATA_LOADED = False
@@ -80,6 +93,21 @@ def load_data():
     global keywords_list, keyword_embeddings, keyword_index
     global vector_to_poem_map, keyword_to_poem_map, advice_data
     global DATA_LOADED
+
+    # Always load advice data (needed for QA, no ML dependency)
+    print(f"Loading advice from {ADVICE_FILE}...")
+    if os.path.exists(ADVICE_FILE):
+        with open(ADVICE_FILE, mode='r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            advice_data = list(reader)
+        print(f"Loaded {len(advice_data)} advice entries")
+    else:
+        print(f"WARNING: advice file {ADVICE_FILE} not found.")
+
+    if not SEARCH_AVAILABLE:
+        print("Search dependencies not available — skipping embedding data load.")
+        DATA_LOADED = False
+        return
 
     if not os.path.exists(EMBEDDINGS_FILE) or not os.path.exists(KEYWORDS_FILE):
         print(f"WARNING: Embedding files ({EMBEDDINGS_FILE} or {KEYWORDS_FILE}) not found.")
@@ -114,16 +142,6 @@ def load_data():
                     keyword_to_poem_map[kw].append(i)
 
         print(f"Loaded {len(poems_data)} poems, {len(keywords_list)} keywords")
-
-        # Load advice data
-        print(f"Loading advice from {ADVICE_FILE}...")
-        if os.path.exists(ADVICE_FILE):
-            with open(ADVICE_FILE, mode='r', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                advice_data = list(reader)
-            print(f"Loaded {len(advice_data)} advice entries")
-        else:
-            print(f"WARNING: advice file {ADVICE_FILE} not found.")
 
         DATA_LOADED = True
     except Exception as e:
@@ -257,7 +275,28 @@ def search_poems_by_keyword_literal(
     return results
 
 
-def search_poems(query, top_n=TARGET_RESULTS):
+def get_poem_id_from_db(poem_text):
+    """Query the SQLite database to find the ID corresponding to a given poem."""
+    if not poem_text:
+        return None
+    try:
+        conn = sqlite3.connect(WIKI_DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM wiki WHERE poem = ? LIMIT 1", (poem_text.strip(),))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row[0]
+    except Exception as e:
+        print(f"Error looking up poem ID: {e}")
+    return None
+
+
+def clean_category_string(c):
+    return c.replace('(', '').replace(')', '').strip().lower()
+
+
+def search_poems(query, category_filter=None, top_n=TARGET_RESULTS):
     """
     Main search function follows a semantic-first pipeline:
     1. Semantic Match (Original Query) - Direct vector matching
@@ -277,7 +316,7 @@ def search_poems(query, top_n=TARGET_RESULTS):
                 candidate_poems[poem_idx]["score"] = score
                 candidate_poems[poem_idx]["match_type"] = match_type
 
-    print(f"\n[SEARCH] Query: '{query}'")
+    print(f"\n[SEARCH] Query: '{query}' (Filter: '{category_filter}')")
 
     query_embedding = embed_text(query_lower)
 
@@ -345,18 +384,32 @@ def search_poems(query, top_n=TARGET_RESULTS):
     sorted_candidates = sorted(candidate_poems.items(), key=lambda x: x[1]["score"], reverse=True)
 
     results = []
-    for poem_idx, data in sorted_candidates[:top_n]:
+    for poem_idx, data in sorted_candidates:
         poem = poems_data[poem_idx]
+        poem_category = poem.get("category", "")
+        
+        # Apply category filter if set
+        if category_filter and clean_category_string(category_filter) not in ("all", ""):
+            if clean_category_string(category_filter) != clean_category_string(poem_category):
+                continue
+                
+        poem_text = poem["poem"]
+        poem_id = get_poem_id_from_db(poem_text)
+        
         results.append(
             {
-                "poem": poem["poem"],
+                "id": poem_id,
+                "poem": poem_text,
                 "meaning": poem.get("explanation", ""),
-                "category": poem.get("category", ""),
+                "category": poem_category,
                 "keywords": poem.get("keywords", ""),
                 "matched_keyword": data["match_type"],
                 "score": data["score"],
             }
         )
+        
+        if len(results) >= top_n:
+            break
 
     print(f"\n[FINAL] Returning {len(results)} poems")
     return results
@@ -386,8 +439,8 @@ def index():
 
 @app.route("/search-page")
 def search_page():
-    """Serve the search interface"""
-    return render_template("search.html")
+    """Redirect search-page to home page"""
+    return redirect(url_for("index"))
 
 
 @app.route("/learning-page")
@@ -406,16 +459,20 @@ def qa_page():
 def search():
     """Search endpoint - returns up to 20 poems"""
     query = request.args.get("q", "")
+    category = request.args.get("cat", "")
     top_n = request.args.get("k", TARGET_RESULTS, type=int)
 
     if not query:
         return jsonify({"results": []})
 
+    if not SEARCH_AVAILABLE:
+        return jsonify({"results": [], "info": "Search is disabled — ML dependencies not installed."})
+
     if not DATA_LOADED:
         print(f"  [WARN] Search requested but DATA_LOADED is False. Returning 'no data'.")
         return jsonify({"results": [], "info": "Semantic search data not found."})
 
-    results = search_poems(query, top_n)
+    results = search_poems(query, category, top_n)
     return jsonify({"results": results})
 
 
@@ -550,6 +607,9 @@ def init_wiki_db():
             pages TEXT
         )
     """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_base_alphabet ON wiki (base_alphabet)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_category ON wiki (category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_poem ON wiki (poem)")
     conn.commit()
     
     cursor.execute("SELECT COUNT(*) FROM wiki")
@@ -578,9 +638,6 @@ def init_wiki_db():
                     INSERT INTO wiki (id, Alphabet, base_alphabet, poem, category, explanation, pages)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, to_insert)
-                
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_base_alphabet ON wiki (base_alphabet)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_category ON wiki (category)")
                 
                 conn.commit()
                 
