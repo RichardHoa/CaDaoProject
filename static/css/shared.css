@@ -151,7 +151,10 @@ main {
         padding: 0.5rem 0.9375rem;
     }
     main {
-        margin: 1.875rem auto;
+        margin: 1.5rem auto !important;
+        width: 95% !important;
+        max-width: 95% !important;
+        padding: 0 0.5rem !important;
     }
 }
 

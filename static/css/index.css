@@ -311,15 +311,18 @@ main {
 .result-card-right {
     width: 250px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
 }
 
 .image-wrapper {
     position: relative;
     border-radius: 0.75rem;
     overflow: hidden;
-    background: #f5f5f5;
-    border: 1px solid rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.08);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    background: transparent;
+    width: 100%;
 }
 
 .image-skeleton {
@@ -339,8 +342,9 @@ main {
     display: block;
     width: 100%;
     height: auto;
-    max-height: 220px;
+    max-height: none;
     object-fit: contain;
+    cursor: zoom-in;
     opacity: 0;
     transition: opacity 0.4s ease;
 }
