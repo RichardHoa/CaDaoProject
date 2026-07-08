@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         progressBar.style.transition = 'width 0.1s linear';
         
         let progress = 0;
-        const totalDuration = 10000; // 10 seconds
+        const totalDuration = 25000;
         const updateInterval = 100; // update every 100ms
         const progressIncrement = (updateInterval / totalDuration) * 100; // 1% per interval
         
