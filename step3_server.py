@@ -652,7 +652,7 @@ def api_qa():
             user_prompt += "Hãy chọn bài phù hợp nhất (0, 1 hoặc 2) và viết câu trả lời."
 
             response = client.chat.completions.create(
-                model="gpt-5",
+                model="gpt-5.1",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
