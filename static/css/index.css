@@ -1,7 +1,11 @@
 /* index.css - Modern Premium Search Interface */
 
+main {
+    max-width: 80% !important;
+}
+
 .search-section {
-    max-width: 60rem;
+    max-width: 100%;
     margin: 2rem auto;
     padding: 0 1.5rem;
     animation: fadeIn 0.5s ease-out;
@@ -192,6 +196,7 @@
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
     border: 1px solid rgba(0, 0, 0, 0.03);
     display: flex;
+    align-items: center; /* Vertically center content and image */
     gap: 2rem;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
@@ -458,13 +463,75 @@
         flex-direction: column;
         padding: 1.25rem;
         gap: 1.25rem;
+        align-items: stretch;
     }
     
     .result-card-right {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+    }
+    
+    .image-wrapper {
+        max-width: 320px;
         width: 100%;
     }
     
     .image-wrapper img {
         max-height: 200px;
     }
+}
+
+/* Lightbox Modal for enlarged scans */
+.wiki-lightbox {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(45, 24, 16, 0.9); /* Warm dark tint matching app theme */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.lightbox-content {
+    max-width: 90%;
+    max-height: 85%;
+    object-fit: contain;
+    border-radius: 0.5rem;
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.4);
+    background: #fff;
+    padding: 0.5rem;
+    cursor: zoom-out;
+    animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 1.5rem;
+    right: 2rem;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 3rem;
+    font-weight: 300;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    opacity: 0.8;
+    line-height: 1;
+}
+
+.lightbox-close:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+@keyframes zoomIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
 }

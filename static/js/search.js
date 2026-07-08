@@ -138,4 +138,49 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!category) return 'default';
         return category.replace(/[()]/g, '').trim().toLowerCase().replace(/\s+/g, '-');
     }
+
+    // --- Lightbox Overlay ---
+    const lightbox = document.getElementById('wikiLightbox');
+    const lightboxImg = document.getElementById('lightboxImg');
+    const lightboxClose = document.getElementById('lightboxClose');
+
+    function openLightbox(src) {
+        if (lightboxImg && lightbox) {
+            lightboxImg.src = src;
+            lightbox.classList.remove("hidden");
+            document.body.style.overflow = "hidden";
+        }
+    }
+
+    function closeLightbox() {
+        if (lightbox && lightboxImg) {
+            lightbox.classList.add("hidden");
+            lightboxImg.src = "";
+            document.body.style.overflow = "";
+        }
+    }
+
+    if (resultsDiv) {
+        resultsDiv.addEventListener("click", function(e) {
+            const img = e.target.closest("img");
+            if (img && img.closest(".image-wrapper")) {
+                openLightbox(img.src);
+            }
+        });
+    }
+
+    if (lightboxClose) lightboxClose.addEventListener("click", closeLightbox);
+    if (lightbox) {
+        lightbox.addEventListener("click", function(e) {
+            if (e.target === lightbox) {
+                closeLightbox();
+            }
+        });
+    }
+
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape" && lightbox && !lightbox.classList.contains("hidden")) {
+            closeLightbox();
+        }
+    });
 });
