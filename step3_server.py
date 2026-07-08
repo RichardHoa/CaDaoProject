@@ -579,8 +579,7 @@ def api_qa():
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.7
+                response_format={"type": "json_object"}
             )
 
             result_json = json.loads(response.choices[0].message.content)
