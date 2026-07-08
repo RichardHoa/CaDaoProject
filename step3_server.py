@@ -65,6 +65,7 @@ TOP_K_KEYWORDS = 10
 LEARNING_DATA_FILE = "data/learning_data.json"
 INTERPRETATIONS_FILE = "data/user_interpretations.txt"
 ADVICE_FILE = "advice.csv"
+ADVICE_INDEX_FILE = "advice_index.pkl"
 
 # Initialize SentenceTransformer Model (only when ML libs are available)
 embedding_model = None
@@ -85,6 +86,7 @@ keyword_index = None
 vector_to_poem_map = []
 keyword_to_poem_map = {}
 advice_data = []
+advice_index_data = None
 
 
 def load_data():
@@ -92,17 +94,33 @@ def load_data():
     global poems_data, poem_embeddings, poem_index
     global keywords_list, keyword_embeddings, keyword_index
     global vector_to_poem_map, keyword_to_poem_map, advice_data
+    global advice_index_data
     global DATA_LOADED
 
     # Always load advice data (needed for QA, no ML dependency)
-    print(f"Loading advice from {ADVICE_FILE}...")
-    if os.path.exists(ADVICE_FILE):
-        with open(ADVICE_FILE, mode='r', encoding='utf-8') as f:
+    # Check both root and advice/ folder for advice.csv
+    advice_path = ADVICE_FILE
+    if not os.path.exists(advice_path) and os.path.exists(os.path.join("advice", ADVICE_FILE)):
+        advice_path = os.path.join("advice", ADVICE_FILE)
+
+    print(f"Loading advice from {advice_path}...")
+    if os.path.exists(advice_path):
+        with open(advice_path, mode='r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             advice_data = list(reader)
         print(f"Loaded {len(advice_data)} advice entries")
     else:
         print(f"WARNING: advice file {ADVICE_FILE} not found.")
+
+    # Load advice index from pickle if it exists
+    print(f"Loading advice index from {ADVICE_INDEX_FILE}...")
+    if os.path.exists(ADVICE_INDEX_FILE):
+        try:
+            with open(ADVICE_INDEX_FILE, "rb") as f:
+                advice_index_data = pickle.load(f)
+            print(f"Loaded advice index with {len(advice_index_data['poems'])} poems")
+        except Exception as e:
+            print(f"ERROR: Failed to load advice index: {e}")
 
     if not SEARCH_AVAILABLE:
         print("Search dependencies not available — skipping embedding data load.")
@@ -479,8 +497,9 @@ def search():
 @app.route("/api/qa", methods=["POST"])
 def api_qa():
     """
-    QA endpoint - Pick a random poem and return static advice.
-    Returns JSON { "poem": ..., "advice": ..., "source": ..., "attempts": ... }
+    QA endpoint - Match user concern using AITeamVN/Vietnamese_Embedding embeddings,
+    retrieve top 3 poems, and use gpt-5-mini with CA_DAO_VAN_DAP_KEY to select
+    the best poem and generate an elegant answer.
     """
     data = request.json
     concern = data.get("concern", "")
@@ -488,20 +507,112 @@ def api_qa():
     if not concern:
         return jsonify({"error": "No concern provided"}), 400
 
+    print(f"\n[QA] User concern: '{concern}'")
+
+    # Try embedding-based search + LLM generation first if search & index are available
+    if advice_index_data and SEARCH_AVAILABLE and embedding_model:
+        try:
+            # 1. Embed user concern
+            q_emb = embedding_model.encode([concern], convert_to_numpy=True)
+            # Normalize query
+            q_norm = np.linalg.norm(q_emb, axis=1, keepdims=True)
+            q_norm[q_norm == 0] = 1.0
+            q_emb = q_emb / q_norm
+
+            # 2. Cosine similarity with searchable explanations
+            scores = np.dot(advice_index_data["embeddings"], q_emb.T).flatten()
+            
+            # 3. Retrieve top 3
+            top_indices = np.argsort(scores)[::-1][:3]
+            top_poems = [advice_index_data["poems"][idx] for idx in top_indices]
+
+            # 4. Use gpt-5-mini with CA_DAO_VAN_DAP_KEY
+            from openai import OpenAI
+            api_key = os.getenv("CA_DAO_VAN_DAP_KEY")
+            if not api_key:
+                print("WARNING: CA_DAO_VAN_DAP_KEY environment variable is not set. Using fallback.")
+                # Fallback to top poem with standard explanation if key is missing
+                selected_poem = top_poems[0]
+                return jsonify({
+                    "poem": selected_poem["poem"],
+                    "advice": selected_poem["searchable_explanation"],
+                    "source": selected_poem.get("category", ""),
+                    "attempts": 1
+                })
+
+            client = OpenAI(api_key=api_key)
+            system_prompt = (
+                "Bạn là một chuyên gia về ca dao tục ngữ Việt Nam và tâm lý học đời sống. "
+                "Nhiệm vụ của bạn là nhận câu hỏi hoặc nỗi lòng của người dùng, phân tích 3 bài ca dao được gợi ý, "
+                "sau đó chọn ra 1 bài ca dao phù hợp nhất để khuyên nhủ/chia sẻ với người dùng. "
+                "Cuối cùng, viết một câu trả lời thật thanh tao, tinh tế, giàu tính văn hóa và tình cảm bằng tiếng Việt.\n"
+                "Bạn PHẢI trả về kết quả dưới dạng JSON với định dạng sau:\n"
+                "{\n"
+                "  \"selected_index\": <chỉ số bài ca dao được chọn, là 0, 1 hoặc 2>,\n"
+                "  \"elegant_answer\": \"<câu trả lời/lời khuyên bằng tiếng Việt>\"\n"
+                "}"
+            )
+            
+            user_prompt = f"Nỗi lòng/Câu hỏi của người dùng:\n\"{concern}\"\n\n"
+            user_prompt += "Dưới đây là 3 bài ca dao ứng viên:\n"
+            for idx, p in enumerate(top_poems):
+                user_prompt += f"Bài ca dao [{idx}]:\n"
+                user_prompt += f"- Lời thơ: {p['poem']}\n"
+                user_prompt += f"- Giải thích: {p['searchable_explanation']}\n\n"
+            user_prompt += "Hãy chọn bài phù hợp nhất (0, 1 hoặc 2) và viết câu trả lời."
+
+            response = client.chat.completions.create(
+                model="gpt-5-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            )
+
+            result_json = json.loads(response.choices[0].message.content)
+            selected_idx = int(result_json.get("selected_index", 0))
+            if selected_idx not in [0, 1, 2]:
+                selected_idx = 0
+            elegant_answer = result_json.get("elegant_answer", "")
+            selected_poem = top_poems[selected_idx]
+
+            return jsonify({
+                "poem": selected_poem["poem"],
+                "advice": elegant_answer,
+                "source": selected_poem.get("category", ""),
+                "attempts": 1
+            })
+
+        except Exception as e:
+            print(f"Error in embedding/LLM processing: {e}")
+            # Fallback if processing fails but we have retrieved candidates
+            if 'top_poems' in locals() and top_poems:
+                selected_poem = top_poems[0]
+                return jsonify({
+                    "poem": selected_poem["poem"],
+                    "advice": selected_poem["searchable_explanation"],
+                    "source": selected_poem.get("category", ""),
+                    "attempts": 1
+                })
+
+    # Legacy static/random fallback if advice_index is not loaded or search is disabled
     if not advice_data:
         return jsonify({"error": "Advice data not loaded"}), 500
 
-    print(f"\n[QA] User concern: '{concern}'")
-    
     selected_poem = random.choice(advice_data)
-    static_advice = selected_poem.get("Advice", "")
+    poem_text = selected_poem.get("poem", selected_poem.get("Poem", ""))
+    static_advice = selected_poem.get("searchable_explanation", selected_poem.get("Advice", ""))
+    source_text = selected_poem.get("category", selected_poem.get("Source", ""))
 
     return jsonify({
-        "poem": selected_poem["Poem"],
+        "poem": poem_text,
         "advice": static_advice,
-        "source": selected_poem.get("Source", ""),
+        "source": source_text,
         "attempts": 1
     })
+
 
 
 @app.route("/api/learning/data")
