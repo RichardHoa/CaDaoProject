@@ -550,7 +550,7 @@ def api_qa():
                 candidate_scores = {int(idx): float(scores[idx]) for idx in top_vec_indices}
 
             print(f"[QA] Multi-vector retrieval: {len(candidate_indices)} candidates (top bi-encoder scores)")
-            for i, idx in enumerate(candidate_indices[:5]):
+            for i, idx in enumerate(candidate_indices):
                 print(f"  [{i}] BiEnc Score: {candidate_scores[idx]:.4f} | Poem: {repr(poems_list[idx]['poem'][:80])}")
 
             # 4. Cross-encoder reranking
@@ -571,8 +571,8 @@ def api_qa():
                     reverse=True
                 )
 
-                print("[QA] Reranked Top 5:")
-                for i, (idx, rscore) in enumerate(reranked[:5]):
+                print(f"[QA] Reranked Top {len(reranked)}:")
+                for i, (idx, rscore) in enumerate(reranked):
                     print(f"  [{i}] Rerank: {rscore:.4f} | BiEnc: {candidate_scores[idx]:.4f} | Poem: {repr(poems_list[idx]['poem'][:80])}")
 
                 # Take top 3 after reranking
