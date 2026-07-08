@@ -313,6 +313,23 @@ def get_poem_id_from_db(poem_text):
     return None
 
 
+def get_poem_explanation_from_db(poem_text):
+    """Query the SQLite database to find the original explanation corresponding to a given poem."""
+    if not poem_text:
+        return ""
+    try:
+        conn = sqlite3.connect(WIKI_DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT explanation FROM wiki WHERE poem = ? LIMIT 1", (poem_text.strip(),))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return row[0]
+    except Exception as e:
+        print(f"Error looking up poem explanation: {e}")
+    return ""
+
+
 def clean_category_string(c):
     return c.replace('(', '').replace(')', '').strip().lower()
 
@@ -609,13 +626,13 @@ def api_qa():
                 "Nhiệm vụ của bạn là lắng nghe nỗi lòng/câu hỏi của người dùng và chọn ra triết lý phù hợp nhất để khuyên giải họ từ 3 gợi ý.\n\n"
                 "QUY TẮC CHỌN LỰA:\n"
                 "1. Hãy phân tích kỹ tâm tư của người dùng. Họ đang lo lắng về sự nghiệp, tình yêu, việc học tập, gia đình, hay sự kiên trì?\n"
-                "2. Đối chiếu ý nghĩa thực tế (thông qua phần giải thích) với nỗi lòng của người dùng để chọn ra nội dung phù hợp nhất với hoàn cảnh của họ.\n"
+                "2. Đối chiếu ý nghĩa thực tế (thông qua phần giải thích gốc và tóm tắt) với nỗi lòng của người dùng để chọn ra nội dung phù hợp nhất với hoàn cảnh của họ.\n"
                 "3. Nếu cả 3 gợi ý đều không hoàn toàn khớp, hãy chọn nội dung có triết lý sống gần gũi nhất.\n\n"
                 "QUY TẮC VIẾT CÂU TRẢ LỜI:\n"
-                "1. Bạn PHẢI xưng hô với người dùng là 'bạn' và xưng mình là 'tôi' hoặc giấu mình tự nhiên, lịch sự (không dùng 'người dùng', 'ta', 'mình').\n"
+                "1. Bạn PHẢI xưng hô với người dùng là 'bạn' và xưng mình là 'tôi'.\n"
                 "2. Tuyệt đối KHÔNG đề cập đến các từ 'ca dao', 'tục ngữ', 'bài ca dao này/kia', 'câu ca dao' hay bất kỳ từ ngữ nào ám chỉ đây là một bài ca dao/tục ngữ trong câu trả lời.\n"
-                "3. Hãy giải thích ngắn gọn trong 1-2 câu về ý nghĩa cốt lõi của triết lý được lựa chọn.\n"
-                "4. Sau phần giải thích, hãy đưa ra những lời khuyên, khuyến nghị (recommendation) hành động thiết thực, tích cực tiếp theo dành cho họ.\n"
+                "3. Hãy giải thích ngắn gọn trong 1-2 câu về nghĩa đen, nghĩa thực tế trực tiếp của các câu thơ.\n"
+                "4. Sau phần giải thích nghĩa đen trực tiếp đó, hãy đưa ra những lời khuyên, khuyến nghị (recommendation) hành động thiết thực, tích cực tiếp theo dành cho họ để áp dụng vào hoàn cảnh hiện tại.\n"
                 "5. Viết câu trả lời thật thanh tao, tinh tế, giàu tình cảm bằng tiếng Việt.\n\n"
                 "Bạn PHẢI trả về kết quả dưới dạng JSON với định dạng sau:\n"
                 "{\n"
@@ -627,9 +644,11 @@ def api_qa():
             user_prompt = f"Nỗi lòng/Câu hỏi của người dùng:\n\"{concern}\"\n\n"
             user_prompt += "Dưới đây là 3 bài ca dao ứng viên:\n"
             for idx, p in enumerate(top_poems):
+                orig_explanation = get_poem_explanation_from_db(p["poem"])
                 user_prompt += f"Bài ca dao [{idx}]:\n"
                 user_prompt += f"- Lời thơ: {p['poem']}\n"
-                user_prompt += f"- Giải thích: {p['searchable_explanation']}\n\n"
+                user_prompt += f"- Giải thích chi tiết (Gốc): {orig_explanation}\n"
+                user_prompt += f"- Giải thích tóm tắt (Tìm kiếm): {p['searchable_explanation']}\n\n"
             user_prompt += "Hãy chọn bài phù hợp nhất (0, 1 hoặc 2) và viết câu trả lời."
 
             response = client.chat.completions.create(
