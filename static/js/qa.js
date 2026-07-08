@@ -22,6 +22,24 @@ document.addEventListener('DOMContentLoaded', () => {
         qaBtn.disabled = true;
         loadingStatus.textContent = i18n.qa_status_reading;
 
+        // Initialize progress bar
+        const progressBar = document.getElementById('progressBar');
+        progressBar.style.width = '0%';
+        progressBar.style.transition = 'width 0.1s linear';
+        
+        let progress = 0;
+        const totalDuration = 10000; // 10 seconds
+        const updateInterval = 100; // update every 100ms
+        const progressIncrement = (updateInterval / totalDuration) * 100; // 1% per interval
+        
+        const progressTimer = setInterval(() => {
+            if (progress < 99) {
+                progress += progressIncrement;
+                if (progress > 99) progress = 99; // hold at 99% until complete
+                progressBar.style.width = `${progress}%`;
+            }
+        }, updateInterval);
+
         try {
             const response = await fetch('/api/qa', {
                 method: 'POST',
@@ -36,6 +54,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await response.json();
+
+            // Finish early / complete progress bar transition to 100%
+            clearInterval(progressTimer);
+            progressBar.style.transition = 'width 0.2s ease-out';
+            progressBar.style.width = '100%';
+            
+            // Wait briefly for 100% fill animation to complete
+            await new Promise(resolve => setTimeout(resolve, 200));
             const OUR_BOOK = "Thi Ca Bình Dân Việt Nam do Nguyễn Tấn Long, Phan Canh sưu tầm và biên soạn, được xuất bản năm 1975";
 
             // Display result
@@ -83,10 +109,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 100);
 
         } catch (error) {
+            clearInterval(progressTimer);
             console.error('QA Error:', error);
             alert(i18n.qa_error);
             qaLoading.classList.add('hidden');
         } finally {
+            clearInterval(progressTimer);
             qaBtn.disabled = false;
         }
     });

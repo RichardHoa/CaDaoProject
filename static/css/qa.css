@@ -129,6 +129,24 @@
     animation: spin 1s ease-in-out infinite;
 }
 
+.progress-bar-container {
+    width: 100%;
+    max-width: 20rem;
+    height: 6px;
+    background-color: rgba(136, 34, 85, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+
+.progress-bar {
+    width: 0%;
+    height: 100%;
+    background-color: var(--color-wine);
+    border-radius: 3px;
+    transition: width 0.1s linear;
+}
+
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
