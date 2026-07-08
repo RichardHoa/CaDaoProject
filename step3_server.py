@@ -526,6 +526,13 @@ def api_qa():
             top_indices = np.argsort(scores)[::-1][:3]
             top_poems = [advice_index_data["poems"][idx] for idx in top_indices]
 
+            # Print logging details
+            print("[QA] Retrieved Top 3 candidate poems:")
+            for idx, p in enumerate(top_poems):
+                score = float(scores[top_indices[idx]])
+                print(f"  [{idx}] Score: {score:.4f} | Poem: {repr(p['poem'])}")
+                print(f"      Explanation: {p['searchable_explanation']}")
+
             # 4. Use gpt-5-mini with CA_DAO_VAN_DAP_KEY
             from openai import OpenAI
             api_key = os.getenv("CA_DAO_VAN_DAP_KEY")
@@ -536,20 +543,25 @@ def api_qa():
                 return jsonify({
                     "poem": selected_poem["poem"],
                     "advice": selected_poem["searchable_explanation"],
-                    "source": selected_poem.get("category", ""),
+                    "source": "",
                     "attempts": 1
                 })
 
             client = OpenAI(api_key=api_key)
             system_prompt = (
-                "Bạn là một chuyên gia về ca dao tục ngữ Việt Nam và tâm lý học đời sống. "
-                "Nhiệm vụ của bạn là nhận câu hỏi hoặc nỗi lòng của người dùng, phân tích 3 bài ca dao được gợi ý, "
-                "sau đó chọn ra 1 bài ca dao phù hợp nhất để khuyên nhủ/chia sẻ với người dùng. "
-                "Cuối cùng, viết một câu trả lời thật thanh tao, tinh tế, giàu tính văn hóa và tình cảm bằng tiếng Việt.\n"
+                "Bạn là một chuyên gia về ca dao tục ngữ Việt Nam và tâm lý học đời sống.\n"
+                "Nhiệm vụ của bạn là lắng nghe nỗi lòng/câu hỏi của người dùng và chọn ra 1 bài ca dao phù hợp nhất để khuyên giải họ từ 3 bài ca dao được gợi ý.\n\n"
+                "QUY TẮC CHỌN BÀI CA DAO:\n"
+                "1. Hãy phân tích kỹ tâm tư của người dùng. Họ đang lo lắng về sự nghiệp, tình yêu, việc học tập, gia đình, hay sự kiên trì?\n"
+                "2. Đối chiếu ý nghĩa thực tế của bài ca dao (thông qua phần giải thích) với nỗi lòng của người dùng. Tuyệt đối không chọn bài ca dao chỉ dựa trên việc khớp từ ngữ bề mặt (ví dụ: người dùng nói về 'học xong tốt nghiệp, tìm kiếm việc làm' mà lại chọn bài về 'tình yêu học trò' hay 'chớ lấy học trò' chỉ vì có từ 'học'). Hãy chọn bài ca dao có ý nghĩa răn dạy về sự bền bỉ, kiên nhẫn, học hỏi chân chính hoặc hành động thực tế phù hợp nhất với hoàn cảnh của họ.\n"
+                "3. Nếu cả 3 bài ca dao đều không hoàn toàn khớp, hãy chọn bài có triết lý sống gần gũi nhất (ví dụ: khuyên kiên trì vượt khó, khuyên tích lũy hành trang, hay khuyên trân trọng thời gian/tuổi trẻ).\n\n"
+                "QUY TẮC VIẾT CÂU TRẢ LỜI:\n"
+                "1. Bạn PHẢI xưng hô với người dùng là 'bạn' và xưng mình là 'tôi' hoặc giấu mình tự nhiên, lịch sự (không dùng 'người dùng', 'ta', 'mình').\n"
+                "2. Viết câu trả lời thật thanh tao, tinh tế, giàu tình cảm bằng tiếng Việt. Chia sẻ sâu sắc về nỗi lòng của họ, giải thích bài ca dao giúp ích gì cho họ và đưa ra lời khuyên thực tế, tích cực dựa trên triết lý của bài ca dao đó.\n\n"
                 "Bạn PHẢI trả về kết quả dưới dạng JSON với định dạng sau:\n"
                 "{\n"
                 "  \"selected_index\": <chỉ số bài ca dao được chọn, là 0, 1 hoặc 2>,\n"
-                "  \"elegant_answer\": \"<câu trả lời/lời khuyên bằng tiếng Việt>\"\n"
+                "  \"elegant_answer\": \"<câu trả lời bằng tiếng Việt, xưng hô 'bạn'>\"\n"
                 "}"
             )
             
@@ -581,7 +593,7 @@ def api_qa():
             return jsonify({
                 "poem": selected_poem["poem"],
                 "advice": elegant_answer,
-                "source": selected_poem.get("category", ""),
+                "source": "",
                 "attempts": 1
             })
 
@@ -593,7 +605,7 @@ def api_qa():
                 return jsonify({
                     "poem": selected_poem["poem"],
                     "advice": selected_poem["searchable_explanation"],
-                    "source": selected_poem.get("category", ""),
+                    "source": "",
                     "attempts": 1
                 })
 
@@ -604,7 +616,6 @@ def api_qa():
     selected_poem = random.choice(advice_data)
     poem_text = selected_poem.get("poem", selected_poem.get("Poem", ""))
     static_advice = selected_poem.get("searchable_explanation", selected_poem.get("Advice", ""))
-    source_text = selected_poem.get("category", selected_poem.get("Source", ""))
 
     return jsonify({
         "poem": poem_text,
