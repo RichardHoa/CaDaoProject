@@ -50,6 +50,12 @@
     <div class="results" id="results" aria-live="polite">
         <div class="no-results">{{ t.search_initial }}</div>
     </div>
+
+    <!-- Lightbox Modal for enlarged scans -->
+    <div id="wikiLightbox" class="wiki-lightbox hidden" role="dialog" aria-modal="true">
+        <button class="lightbox-close" id="lightboxClose" aria-label="Close image">×</button>
+        <img id="lightboxImg" class="lightbox-content" src="" alt="Enlarged scan">
+    </div>
 </section>
 {% endblock %}
 
