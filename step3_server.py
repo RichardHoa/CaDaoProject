@@ -27,7 +27,7 @@ try:
     import numpy as np
     import faiss
     from sklearn.preprocessing import normalize
-    from sentence_transformers import SentenceTransformer
+    from sentence_transformers import SentenceTransformer, CrossEncoder
     SEARCH_AVAILABLE = True
 except ImportError as _import_err:
     print(f"WARNING: ML dependencies not available ({_import_err}).")
@@ -69,9 +69,12 @@ ADVICE_INDEX_FILE = "advice_index.pkl"
 
 # Initialize SentenceTransformer Model (only when ML libs are available)
 embedding_model = None
+reranker_model = None
 if SEARCH_AVAILABLE:
     print("Loading SentenceTransformer model 'AITeamVN/Vietnamese_Embedding'...")
     embedding_model = SentenceTransformer("AITeamVN/Vietnamese_Embedding")
+    print("Loading CrossEncoder reranker 'AITeamVN/Vietnamese_Reranker'...")
+    reranker_model = CrossEncoder("AITeamVN/Vietnamese_Reranker")
 else:
     print("Skipping model load — search is disabled.")
 
@@ -519,21 +522,74 @@ def api_qa():
             q_norm[q_norm == 0] = 1.0
             q_emb = q_emb / q_norm
 
-            # 2. Cosine similarity with searchable explanations
+            # 2. Cosine similarity against all vectors (multi-vector)
             scores = np.dot(advice_index_data["embeddings"], q_emb.T).flatten()
-            
-            # 3. Retrieve top 3
-            top_indices = np.argsort(scores)[::-1][:3]
-            top_poems = [advice_index_data["poems"][idx] for idx in top_indices]
 
-            # Print logging details
-            print("[QA] Retrieved Top 3 candidate poems:")
-            for idx, p in enumerate(top_poems):
-                score = float(scores[top_indices[idx]])
-                print(f"  [{idx}] Score: {score:.4f} | Poem: {repr(p['poem'])}")
+            # 3. Aggregate: max score per poem across its vectors
+            vector_to_poem_map = advice_index_data.get("vector_to_poem_map", None)
+            poems_list = advice_index_data["poems"]
+
+            if vector_to_poem_map is not None:
+                # Multi-vector index: aggregate max score per poem
+                poem_max_scores = {}  # poem_idx -> max_score
+                for vec_idx, score in enumerate(scores):
+                    poem_idx = vector_to_poem_map[vec_idx]
+                    if poem_idx not in poem_max_scores or score > poem_max_scores[poem_idx]:
+                        poem_max_scores[poem_idx] = score
+
+                # Sort poems by max score descending, take top 20 for reranking
+                sorted_poems = sorted(poem_max_scores.items(), key=lambda x: x[1], reverse=True)
+                top_n_for_rerank = 20
+                candidate_indices = [idx for idx, _ in sorted_poems[:top_n_for_rerank]]
+                candidate_scores = {idx: sc for idx, sc in sorted_poems[:top_n_for_rerank]}
+            else:
+                # Legacy single-vector index (backwards compatibility)
+                top_n_for_rerank = 20
+                top_vec_indices = np.argsort(scores)[::-1][:top_n_for_rerank]
+                candidate_indices = list(top_vec_indices)
+                candidate_scores = {int(idx): float(scores[idx]) for idx in top_vec_indices}
+
+            print(f"[QA] Multi-vector retrieval: {len(candidate_indices)} candidates (top bi-encoder scores)")
+            for i, idx in enumerate(candidate_indices[:5]):
+                print(f"  [{i}] BiEnc Score: {candidate_scores[idx]:.4f} | Poem: {repr(poems_list[idx]['poem'][:80])}")
+
+            # 4. Cross-encoder reranking
+            if reranker_model and len(candidate_indices) > 0:
+                print(f"[QA] Reranking {len(candidate_indices)} candidates with CrossEncoder...")
+                rerank_pairs = []
+                for idx in candidate_indices:
+                    # Feed concern + explanation to the reranker
+                    doc_text = poems_list[idx]["searchable_explanation"]
+                    rerank_pairs.append([concern, doc_text])
+
+                rerank_scores = reranker_model.predict(rerank_pairs)
+
+                # Combine: sort by reranker score
+                reranked = sorted(
+                    zip(candidate_indices, rerank_scores),
+                    key=lambda x: x[1],
+                    reverse=True
+                )
+
+                print("[QA] Reranked Top 5:")
+                for i, (idx, rscore) in enumerate(reranked[:5]):
+                    print(f"  [{i}] Rerank: {rscore:.4f} | BiEnc: {candidate_scores[idx]:.4f} | Poem: {repr(poems_list[idx]['poem'][:80])}")
+
+                # Take top 3 after reranking
+                top_indices = [idx for idx, _ in reranked[:3]]
+            else:
+                # No reranker available, use bi-encoder scores directly
+                top_indices = candidate_indices[:3]
+
+            top_poems = [poems_list[idx] for idx in top_indices]
+
+            # Print final selection
+            print("[QA] Final Top 3 candidate poems:")
+            for i, p in enumerate(top_poems):
+                print(f"  [{i}] Poem: {repr(p['poem'])}")
                 print(f"      Explanation: {p['searchable_explanation']}")
 
-            # 4. Use gpt-5-mini with CA_DAO_VAN_DAP_KEY
+            # 5. Use gpt-5 with CA_DAO_VAN_DAP_KEY
             from openai import OpenAI
             api_key = os.getenv("CA_DAO_VAN_DAP_KEY")
             if not api_key:
@@ -574,7 +630,7 @@ def api_qa():
             user_prompt += "Hãy chọn bài phù hợp nhất (0, 1 hoặc 2) và viết câu trả lời."
 
             response = client.chat.completions.create(
-                model="gpt-5-mini",
+                model="gpt-5",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -598,6 +654,8 @@ def api_qa():
 
         except Exception as e:
             print(f"Error in embedding/LLM processing: {e}")
+            import traceback
+            traceback.print_exc()
             # Fallback if processing fails but we have retrieved candidates
             if 'top_poems' in locals() and top_poems:
                 selected_poem = top_poems[0]
