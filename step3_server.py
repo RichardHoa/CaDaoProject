@@ -55,17 +55,18 @@ def log_request(response):
     return response
 
 # Config
-EMBEDDINGS_FILE = "embeddings.pkl"
-KEYWORDS_FILE = "keywords.pkl"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EMBEDDINGS_FILE = os.path.join(BASE_DIR, "embeddings.pkl")
+KEYWORDS_FILE = os.path.join(BASE_DIR, "keywords.pkl")
 SIMILARITY_THRESHOLD = 0.6
 DECOMPOSED_SIMILARITY_THRESHOLD = 0.45
 KEYWORD_SIMILARITY_THRESHOLD = 0.60
 TARGET_RESULTS = 20
 TOP_K_KEYWORDS = 10
-LEARNING_DATA_FILE = "data/learning_data.json"
-INTERPRETATIONS_FILE = "data/user_interpretations.txt"
-ADVICE_FILE = "advice.csv"
-ADVICE_INDEX_FILE = "advice_index.pkl"
+LEARNING_DATA_FILE = os.path.join(BASE_DIR, "data", "learning_data.json")
+INTERPRETATIONS_FILE = os.path.join(BASE_DIR, "data", "user_interpretations.txt")
+ADVICE_FILE = os.path.join(BASE_DIR, "advice.csv")
+ADVICE_INDEX_FILE = os.path.join(BASE_DIR, "advice_index.pkl")
 
 # Initialize SentenceTransformer Model (only when ML libs are available)
 embedding_model = None
@@ -761,9 +762,10 @@ def post_feedback():
 
 
 # --- Wiki Configurations & Helper Functions ---
-WIKI_CSV_FILE = "extractions/wiki.csv"
-WIKI_DB_FILE = "data/wiki.db"
-WIKI_IMAGES_DIR = "extractions/output-folder"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WIKI_CSV_FILE = os.path.join(BASE_DIR, "extractions", "wiki.csv")
+WIKI_DB_FILE = os.path.join(BASE_DIR, "data", "wiki.db")
+WIKI_IMAGES_DIR = os.path.join(BASE_DIR, "extractions", "output-folder")
 
 def get_base_alphabet(letter):
     if not letter:
@@ -866,7 +868,7 @@ def get_wiki_image(image_id):
     if not safe_id.endswith(".png"):
         safe_id += ".png"
         
-    img_path = os.path.join("extractions", "output-folder", safe_id)
+    img_path = os.path.join(WIKI_IMAGES_DIR, safe_id)
     if not os.path.exists(img_path):
         return "Image not found", 404
         
