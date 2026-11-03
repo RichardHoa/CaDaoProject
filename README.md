@@ -8,7 +8,7 @@ The site has these pages:
 |---|---|---|---|
 | Search | `/` | Semantic and keyword search over all entries, with a category filter | `data/indexes/embeddings.pkl`, `data/indexes/keywords.pkl`, ML libraries |
 | Ca dao vấn đáp (Q&A) | `/qa-page` | The user describes a worry. The app finds the 3 best-matching entries, reranks them, and asks OpenAI to pick one and write advice | `data/indexes/advice_index.pkl`, `data/advice/advice.csv`, `CA_DAO_VAN_DAP_KEY`, ML libraries |
-| Wiki | `/wiki-page` | Browse every entry A–Z, with the cropped scan image of the original page | `data/wiki/wiki.db` (in git), `data/images/*.png` |
+| Wiki | `/wiki-page` | Browse every entry A–Z, with the cropped scan image of the original page | `data/wiki/wiki.csv` (in git), `data/images/*.png` |
 | Learning | `/learning-page` | A fill-in-the-blank game over curated poems, with likes/dislikes and user interpretations | `data/learning/learning-data.json` (in git) |
 
 The nav bar only shows **Search** and **Q&A**. Wiki and Learning still work, but you reach them by typing the URL. The UI is in Vietnamese and English; the language is chosen by the `lang` cookie (strings are in `app/i18n.py`).
@@ -57,7 +57,7 @@ The code is in git, but most of the data the site runs on is not: it is either t
 
 | File | What it is |
 |---|---|
-| `data/wiki/wiki.db` | Every entry (8,651 rows) with its explanation. Powers the Wiki page and gives Search and Q&A their entry IDs. |
+| `data/wiki/wiki.csv` | The master dataset: every entry (8,651 rows) with its explanation and keywords. On first start the server builds `data/wiki/wiki.db` from it, which powers the Wiki page and gives Search and Q&A their entry IDs. |
 | `data/learning/learning-data.json` | The 33 curated poems for the Learning game. See [Learning data](#learning-data) to edit it. |
 | `data/learning/user_interpretations.txt` | Likes/dislikes that visitors leave on the Learning page. |
 | `data/enrichment/keywords.json` | The controlled keyword vocabulary that every entry's keywords are drawn from. |
@@ -111,7 +111,7 @@ data/
   images/                    <id>.png, the cropped scan of each entry
   review/                    input.csv, reviewed.csv, review_state.json
   enrichment/                keywords.json (in git), .keywords_embeddings.json (cache)
-  wiki/                      wiki.csv (master dataset), wiki.db (in git)
+  wiki/                      wiki.csv (master dataset, in git), wiki.db (built from wiki.csv)
   indexes/                   embeddings.pkl, keywords.pkl, advice_index.pkl
   advice/                    advice.csv
   learning/                  learning-data.json, user_interpretations.txt (in git)
@@ -245,7 +245,7 @@ Restart the server afterwards.
 
 ### Rebuilding `data/wiki/wiki.db`
 
-On startup the server imports `data/wiki/wiki.csv` into `data/wiki/wiki.db`, but only if the table is empty. If you change `wiki.csv`, delete `wiki.db` and restart the server to rebuild it. The database is committed to git, so commit the new one too.
+On startup the server imports `data/wiki/wiki.csv` into `data/wiki/wiki.db`, but only if the table is empty. `wiki.db` is not in git; commit changes to `wiki.csv` instead. If `wiki.csv` changes (because you edited it or pulled someone else's edit), delete `wiki.db` and restart the server to rebuild it. Otherwise the server keeps serving the old data.
 
 ---
 
