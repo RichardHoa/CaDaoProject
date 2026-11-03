@@ -63,7 +63,7 @@ DECOMPOSED_SIMILARITY_THRESHOLD = 0.45
 KEYWORD_SIMILARITY_THRESHOLD = 0.60
 TARGET_RESULTS = 20
 TOP_K_KEYWORDS = 10
-LEARNING_DATA_FILE = os.path.join(BASE_DIR, "data", "learning_data.json")
+LEARNING_DATA_FILE = os.path.join(BASE_DIR, "data", "learning-data.json")
 INTERPRETATIONS_FILE = os.path.join(BASE_DIR, "data", "user_interpretations.txt")
 ADVICE_FILE = os.path.join(BASE_DIR, "advice.csv")
 ADVICE_INDEX_FILE = os.path.join(BASE_DIR, "advice_index.pkl")
@@ -104,8 +104,9 @@ def load_data():
     # Always load advice data (needed for QA, no ML dependency)
     # Check both root and advice/ folder for advice.csv
     advice_path = ADVICE_FILE
-    if not os.path.exists(advice_path) and os.path.exists(os.path.join("advice", ADVICE_FILE)):
-        advice_path = os.path.join("advice", ADVICE_FILE)
+    advice_fallback = os.path.join(BASE_DIR, "advice", "advice.csv")
+    if not os.path.exists(advice_path) and os.path.exists(advice_fallback):
+        advice_path = advice_fallback
 
     print(f"Loading advice from {advice_path}...")
     if os.path.exists(advice_path):
@@ -114,7 +115,7 @@ def load_data():
             advice_data = list(reader)
         print(f"Loaded {len(advice_data)} advice entries")
     else:
-        print(f"WARNING: advice file {ADVICE_FILE} not found.")
+        print(f"WARNING: advice file not found at {ADVICE_FILE} or {advice_fallback}.")
 
     # Load advice index from pickle if it exists
     print(f"Loading advice index from {ADVICE_INDEX_FILE}...")
@@ -701,7 +702,7 @@ def api_qa():
     return jsonify({
         "poem": poem_text,
         "advice": static_advice,
-        "source": source_text,
+        "source": "",
         "attempts": 1
     })
 

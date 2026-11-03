@@ -4,7 +4,7 @@ import os
 import re
 
 # Paths relative to the project root
-JSON_PATH = '../data/learning_data.json'
+JSON_PATH = '../data/learning-data.json'
 TXT_PATH = 'learning_data_editor.txt'
 
 def export_data():

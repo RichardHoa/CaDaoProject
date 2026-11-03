@@ -1,0 +1,8 @@
+# Extra dependencies for the OCR pipeline (extractions/step1.py, step2.py,
+# step2_improved.py, cut.py, apple_ocr.py). macOS only: OCR uses Apple Vision.
+#   pip install -r requirements-ocr.txt
+PyMuPDF==1.27.2.3
+opencv-python==4.13.0.92
+pyobjc-core==12.1 ; sys_platform == "darwin"
+pyobjc-framework-Cocoa==12.1 ; sys_platform == "darwin"
+pyobjc-framework-Vision==12.1 ; sys_platform == "darwin"

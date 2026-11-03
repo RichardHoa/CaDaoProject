@@ -123,8 +123,8 @@ Danh sách từ khóa có sẵn:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, default="wiki_with_metadata_fixed.csv", help="Input CSV file")
-    parser.add_argument("--output", type=str, default="wiki_with_metadata_fixed.csv", help="Output CSV file")
+    parser.add_argument("--input", type=str, required=True, help="Input CSV file")
+    parser.add_argument("--output", type=str, required=True, help="Output CSV file")
     parser.add_argument("--workers", type=int, default=20, help="Number of concurrent workers")
     args = parser.parse_args()
     

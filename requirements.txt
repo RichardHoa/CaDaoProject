@@ -7,9 +7,9 @@ blinker==1.9.0
 certifi==2026.2.25
 charset-normalizer==3.4.7
 click==8.3.1
-cuda-bindings==13.2.0
-cuda-pathfinder==1.5.0
-cuda-toolkit==13.0.2
+cuda-bindings==13.2.0 ; sys_platform == "linux"
+cuda-pathfinder==1.5.0 ; sys_platform == "linux"
+cuda-toolkit==13.0.2 ; sys_platform == "linux"
 distro==1.9.0
 faiss-cpu==1.13.2
 filelock==3.25.2
@@ -35,21 +35,21 @@ narwhals==2.19.0
 networkx==3.6.1
 numba==0.65.0
 numpy==2.4.4
-nvidia-cublas==13.1.0.3
-nvidia-cuda-cupti==13.0.85
-nvidia-cuda-nvrtc==13.0.88
-nvidia-cuda-runtime==13.0.96
-nvidia-cudnn-cu13==9.19.0.56
-nvidia-cufft==12.0.0.61
-nvidia-cufile==1.15.1.6
-nvidia-curand==10.4.0.35
-nvidia-cusolver==12.0.4.66
-nvidia-cusparse==12.6.3.3
-nvidia-cusparselt-cu13==0.8.0
-nvidia-nccl-cu13==2.28.9
-nvidia-nvjitlink==13.0.88
-nvidia-nvshmem-cu13==3.4.5
-nvidia-nvtx==13.0.85
+nvidia-cublas==13.1.0.3 ; sys_platform == "linux"
+nvidia-cuda-cupti==13.0.85 ; sys_platform == "linux"
+nvidia-cuda-nvrtc==13.0.88 ; sys_platform == "linux"
+nvidia-cuda-runtime==13.0.96 ; sys_platform == "linux"
+nvidia-cudnn-cu13==9.19.0.56 ; sys_platform == "linux"
+nvidia-cufft==12.0.0.61 ; sys_platform == "linux"
+nvidia-cufile==1.15.1.6 ; sys_platform == "linux"
+nvidia-curand==10.4.0.35 ; sys_platform == "linux"
+nvidia-cusolver==12.0.4.66 ; sys_platform == "linux"
+nvidia-cusparse==12.6.3.3 ; sys_platform == "linux"
+nvidia-cusparselt-cu13==0.8.0 ; sys_platform == "linux"
+nvidia-nccl-cu13==2.28.9 ; sys_platform == "linux"
+nvidia-nvjitlink==13.0.88 ; sys_platform == "linux"
+nvidia-nvshmem-cu13==3.4.5 ; sys_platform == "linux"
+nvidia-nvtx==13.0.85 ; sys_platform == "linux"
 ollama==0.6.1
 openai==2.44.0
 packaging==26.0
@@ -83,7 +83,7 @@ tokenizers==0.22.2
 torch==2.11.0
 tqdm==4.67.3
 transformers==5.5.0
-triton==3.6.0
+triton==3.6.0 ; sys_platform == "linux"
 typer==0.24.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0

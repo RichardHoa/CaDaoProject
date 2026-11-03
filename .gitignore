@@ -25,6 +25,7 @@ egg-info/
 *.pkl
 *.pickle
 *.txt
+!requirements*.txt
 
 # Claude & AI Assistant artifacts (Requested)
 .claude/
