@@ -868,8 +868,22 @@ def get_wiki_image(image_id):
     if not safe_id.endswith(".png"):
         safe_id += ".png"
         
-    img_path = os.path.join(WIKI_IMAGES_DIR, safe_id)
-    if not os.path.exists(img_path):
+    # Check primary path (BASE_DIR/extractions/output-folder) and fallback paths
+    candidates = [
+        os.path.join(WIKI_IMAGES_DIR, safe_id),
+        os.path.join(BASE_DIR, "output-folder", safe_id),
+        os.path.join("extractions", "output-folder", safe_id),
+        os.path.join("output-folder", safe_id)
+    ]
+    
+    img_path = None
+    for path in candidates:
+        if os.path.exists(path):
+            img_path = path
+            break
+            
+    if not img_path:
+        print(f"[IMAGE 404] Image '{safe_id}' not found. Checked locations: {candidates}", flush=True)
         return "Image not found", 404
         
     from flask import send_file
