@@ -1,17 +1,17 @@
 # Hồn Việt: Ca Dao Search & Q&A
 
-A Flask web app for searching and learning Vietnamese folk literature (ca dao, tục ngữ, thành ngữ). About 8,600 entries were scanned from the two-volume dictionary *Từ điển Tục ngữ Thành ngữ Ca dao Việt Nam* (Quyển Thượng and Quyển Hạ). The entries were OCR'd, reviewed by hand and enriched with an LLM, then indexed for semantic search.
+A Flask web app for searching and learning Vietnamese folk literature (ca dao, tục ngữ, thành ngữ). About 8,600 entries were scanned from the two-volume dictionary *Từ điển Tục ngữ Thành ngữ Ca dao Việt Nam* (Quyển Thượng and Quyển Hạ). The entries were OCR'd, reviewed by hand and enriched with an LLM, then indexed for semantic search. Domain terms are defined in [`GLOSSARY.md`](GLOSSARY.md).
 
 The site has these pages:
 
 | Page | URL | What it does | Needs |
 |---|---|---|---|
-| Search | `/` | Semantic and keyword search over all entries, with a category filter | `embeddings.pkl`, `keywords.pkl`, ML libraries |
-| Ca dao vấn đáp (Q&A) | `/qa-page` | The user describes a worry. The app finds the 3 best-matching sayings, reranks them, and asks OpenAI to pick one and write advice | `advice_index.pkl`, `CA_DAO_VAN_DAP_KEY`, ML libraries |
-| Wiki | `/wiki-page` | Browse every entry A–Z, with the cropped scan image of the original page | `data/wiki.db` (in git), `extractions/output-folder/*.png` |
-| Learning | `/learning-page` | A fill-in-the-blank game over curated poems, with likes/dislikes and user interpretations | `data/learning-data.json` (in git) |
+| Search | `/` | Semantic and keyword search over all entries, with a category filter | `data/indexes/embeddings.pkl`, `data/indexes/keywords.pkl`, ML libraries |
+| Ca dao vấn đáp (Q&A) | `/qa-page` | The user describes a worry. The app finds the 3 best-matching entries, reranks them, and asks OpenAI to pick one and write advice | `data/indexes/advice_index.pkl`, `data/advice/advice.csv`, `CA_DAO_VAN_DAP_KEY`, ML libraries |
+| Wiki | `/wiki-page` | Browse every entry A–Z, with the cropped scan image of the original page | `data/wiki/wiki.db` (in git), `data/images/*.png` |
+| Learning | `/learning-page` | A fill-in-the-blank game over curated poems, with likes/dislikes and user interpretations | `data/learning/learning-data.json` (in git) |
 
-The nav bar only shows **Search** and **Q&A**. Wiki and Learning still work, but you reach them by typing the URL. The UI is in Vietnamese and English; the language is chosen by the `lang` cookie (strings are in `i18n.py`).
+The nav bar only shows **Search** and **Q&A**. Wiki and Learning still work, but you reach them by typing the URL. The UI is in Vietnamese and English; the language is chosen by the `lang` cookie (strings are in `app/i18n.py`).
 
 ---
 
@@ -36,66 +36,91 @@ Kill whatever is holding the port with `fuser -k 4000/tcp` (Linux) or `lsof -ti 
 
 On first start the server downloads two Hugging Face models: `AITeamVN/Vietnamese_Embedding` (BGE-M3 based) and `AITeamVN/Vietnamese_Reranker`. They take several GB of disk and RAM, so expect the first boot to be slow. No GPU is required.
 
-**The server degrades gracefully.** If `torch`, `faiss` or `sentence-transformers` is not installed, or the `.pkl` files are missing, the server still starts. Search then returns "no data", Q&A falls back to a random poem, and Wiki and Learning work as normal. This lets you work on the frontend on a lightweight machine.
+**The server degrades gracefully.** If `torch`, `faiss` or `sentence-transformers` is not installed, or the index files are missing, the server still starts. Search then returns "no data", Q&A falls back to a random entry, and Wiki and Learning work as normal. This lets you work on the frontend on a lightweight machine.
+
+### Run everything from the repo root
+
+Every script is a module run with `python -m` from the repo root, for example `python -m app.server` or `python -m pipeline.build_search_index`. All data paths are defined once in [`paths.py`](paths.py) and resolve from the repo root.
 
 ### Dependencies
 
 - `requirements.txt` holds what the server and indexing steps need. It was frozen on a Linux CUDA machine; the CUDA-only packages (`nvidia-*`, `cuda-*`, `triton`) are marked `sys_platform == "linux"`, so pip skips them on macOS.
-- `requirements-ocr.txt` holds the extra packages for the OCR pipeline (Steps 1–2): PyMuPDF, OpenCV and PyObjC. PyObjC is macOS only.
+- `requirements-ocr.txt` holds the extra packages for the OCR pipeline (Steps 1–2) and the OCR tools: PyMuPDF, OpenCV and PyObjC. PyObjC is macOS only.
 
 ---
 
 ## Data you need
 
-The code is in git, but most of the data the site runs on is not: it is either too large or generated, and `.gitignore` excludes `*.csv`, `*.pkl`, `*.pdf` and most `*.json`/`*.txt` files. **You do not need to build any of it yourself.** The finished files already exist; you copy them from the team's shared storage into the right folders.
+The code is in git, but most of the data the site runs on is not: it is either too large or generated, and `.gitignore` excludes most of `data/`. **You do not need to build any of it yourself.** The finished files already exist; you copy them from the team's shared storage into the right folders.
 
 ### 1. What you already have after `git clone`
 
 | File | What it is |
 |---|---|
-| `data/wiki.db` | Every entry (8,651 rows) with its explanation. Powers the Wiki page and gives Search and Q&A their poem IDs. |
-| `data/learning-data.json` | The 33 curated poems for the Learning game. See [Learning data](#learning-data) to edit it. |
-| `data/user_interpretations.txt` | Likes/dislikes that visitors leave on the Learning page. |
+| `data/wiki/wiki.db` | Every entry (8,651 rows) with its explanation. Powers the Wiki page and gives Search and Q&A their entry IDs. |
+| `data/learning/learning-data.json` | The 33 curated poems for the Learning game. See [Learning data](#learning-data) to edit it. |
+| `data/learning/user_interpretations.txt` | Likes/dislikes that visitors leave on the Learning page. |
+| `data/enrichment/keywords.json` | The controlled keyword vocabulary that every entry's keywords are drawn from. |
 
-With only these, the **Wiki** (without scan images) and **Learning** pages work. Search shows "no data" and Q&A shows a random poem.
+With only these, the **Wiki** (without scan images) and **Learning** pages work. Search shows "no data" and Q&A shows a random entry.
 
 ### 2. What to ask the team for
 
-Pick the pages you want, then copy those files. Put them at **exactly** these paths, relative to the repo root:
+Pick the pages you want, then copy those files to **exactly** these paths:
 
-| You want… | Copy these files | Put them at |
+| You want… | Copy these files | Put them in |
 |---|---|---|
-| **Search** | `embeddings.pkl`, `keywords.pkl` | repo root |
-| **Q&A** | `advice_index.pkl` and `advice.csv` (plus `CA_DAO_VAN_DAP_KEY` in `.env`) | `advice_index.pkl` in the repo root, `advice.csv` in `advice/` |
-| **Scan images on the Wiki** | the `output-folder/` folder (~8,700 PNGs) | `extractions/output-folder/` |
-
-If you want everything, your folder should look like this:
-
-```
-CaDaoProject/
-├── embeddings.pkl              ← copied
-├── keywords.pkl                ← copied
-├── advice_index.pkl            ← copied
-├── advice/
-│   └── advice.csv              ← copied
-├── extractions/
-│   └── output-folder/          ← copied
-│       ├── <id>.png
-│       └── ...
-├── data/
-│   ├── wiki.db                 (from git)
-│   ├── learning-data.json      (from git)
-│   └── user_interpretations.txt (from git)
-└── step3_server.py
-```
+| **Search** | `embeddings.pkl`, `keywords.pkl` | `data/indexes/` |
+| **Q&A** | `advice_index.pkl` and `advice.csv` (plus `CA_DAO_VAN_DAP_KEY` in `.env`) | `data/indexes/` and `data/advice/` |
+| **Scan images on the Wiki** | the ~8,700 `<id>.png` images | `data/images/` |
 
 ### 3. Check it worked
 
 Start the server (`make dev`) and read the startup log. It prints a line for each file it loads, such as `Loaded 687 advice entries`, and a `WARNING` line for each file it can't find. Fix the path of anything it warns about and restart.
 
-You can also run `python check.py` from the repo root to sanity-check the `.pkl` files.
+You can also run `python -m tools.check_indexes` to sanity-check the search index files.
 
 That's all a user of the site needs. The next section is only for people who want to regenerate the data.
+
+---
+
+## Repo layout
+
+```
+app/                       ★ the web app (Flask)
+  server.py                  everything the site does
+  i18n.py                    UI strings (vi / en)
+  templates/  static/        frontend
+pipeline/                  ★ steps that build the data (see below)
+  split_spreads.py           Step 1: split 2-page spreads
+  ocr_editor/                Step 2: OCR editor web tool (macOS)
+  review_app/                Step 3: human review web tool
+  enrich_metadata.py         Step 4: LLM explanation + keywords
+  build_search_index.py      Step 5: search index
+  build_advice_index.py      Step 6: Q&A index
+tools/                     one-off helpers
+  cut_pages.py               remove pages from a PDF
+  apple_ocr.py               standalone Apple Vision OCR CLI (not part of the pipeline)
+  check_indexes.py           sanity-check the search index files
+  learning_data_csv.py       learning data JSON <-> CSV
+  learning_data_text.py      learning data JSON <-> plain text
+paths.py                   every data path, resolved from the repo root
+data/
+  source/                    scanned PDFs: 1.pdf, 2.pdf, 1-split.pdf, 2-split.pdf
+  ocr/                       entries-extracted.csv (OCR editor output)
+  images/                    <id>.png, the cropped scan of each entry
+  review/                    input.csv, reviewed.csv, review_state.json
+  enrichment/                keywords.json (in git), .keywords_embeddings.json (cache)
+  wiki/                      wiki.csv (master dataset), wiki.db (in git)
+  indexes/                   embeddings.pkl, keywords.pkl, advice_index.pkl
+  advice/                    advice.csv
+  learning/                  learning-data.json, user_interpretations.txt (in git)
+docs/
+  guidelines/                rules for AI coding assistants
+  agents/                    config for agent skills
+GLOSSARY.md                domain terms
+Makefile                   dev / prod / stop / status / logs
+```
 
 ---
 
@@ -105,150 +130,144 @@ You only need this section if you are changing the dataset itself: fixing OCR er
 
 **Usually you only need Step 5 and/or Step 6**, after editing `wiki.csv` or `advice.csv`. Steps 1–4 mean redoing OCR and manual review of thousands of entries, and Step 4 costs OpenAI money.
 
-### Extra files the pipeline uses
+### Files the pipeline uses
 
 These are also in shared storage. Ask for the ones the step you are running reads.
 
 | File | Size / rows | Made by | Read by |
 |---|---|---|---|
-| `extractions/1.pdf`, `2.pdf` | 2 volumes | the original scanned dictionary | Step 1 |
-| `extractions/poem-extraction.csv` | | Step 2 | merged by hand into `filter/input.csv` |
-| `filter/input.csv` | | merged by hand | Step 3 |
-| `filter/filter-dataset.csv` | | Step 3 | Step 4 |
-| `extractions/keywords.json` | ~76 keywords | Step 4 (grows as it runs) | Step 4 |
-| `extractions/wiki.csv` | 8,651 rows | Step 4 | Step 5; rebuilding `wiki.db` |
-| `advice/advice.csv` | 687 rows | curated subset of `wiki.csv` (how it was made is not recorded) | Step 6 |
+| `data/source/1.pdf`, `2.pdf` | 2 volumes | the original scanned dictionary | Step 1 |
+| `data/source/1-split.pdf`, `2-split.pdf` | | Step 1 | Step 2 |
+| `data/ocr/entries-extracted.csv` | | Step 2 | merged by hand into `data/review/input.csv` |
+| `data/review/input.csv` | | merged by hand | Step 3 |
+| `data/review/reviewed.csv` | | Step 3 | Step 4 |
+| `data/enrichment/keywords.json` | ~76 keywords | Step 4 (grows as it runs) | Step 4 |
+| `data/wiki/wiki.csv` | 8,651 rows | Step 4 | Step 5; rebuilding `wiki.db` |
+| `data/advice/advice.csv` | 687 rows | curated subset of `wiki.csv` (how it was made is not recorded) | Step 6 |
 
 ### Main CSV schemas
 
-- `extractions/wiki.csv` is the master dataset: `id, Alphabet, poem, category, explanation, pages, searchable_explanation, keywords`
-  - `id` is a UUID. It is also the image name in `output-folder/`.
+- `data/wiki/wiki.csv` is the master dataset: `id, Alphabet, poem, category, explanation, pages, searchable_explanation, keywords`
+  - `id` is a UUID. It is also the image name in `data/images/`.
   - `category` is one of `(CA DAO)`, `(TỤC NGỮ)`, `(THÀNH NGỮ)`, and so on.
   - `explanation` is the original dictionary text.
   - `searchable_explanation` is a 2–3 sentence LLM summary, used for embedding.
-  - `keywords` is a comma-separated list drawn from `extractions/keywords.json`.
-- `advice/advice.csv`: `id, poem, category, searchable_explanation, keywords`
-- `filter/input.csv` → `filter/filter-dataset.csv`: `id, poem, category, explanation, Quyển[, keyword, type]`
+  - `keywords` is a comma-separated list drawn from `data/enrichment/keywords.json`.
+- `data/advice/advice.csv`: `id, poem, category, searchable_explanation, keywords`
+- `data/review/input.csv` → `data/review/reviewed.csv`: `id, poem, category, explanation, Quyển[, keyword, type]`
 
 ### The pipeline
 
 ```
- 1.pdf, 2.pdf  (scanned dictionary, 2 volumes)
-     │  Step 1: extractions/step1.py, extractions/cut.py    split 2-page spreads, drop junk pages
+ data/source/1.pdf, 2.pdf  (scanned dictionary, 2 volumes)
+     │  Step 1: pipeline.split_spreads, tools.cut_pages      split 2-page spreads, drop junk pages
      ▼
- 1-split.pdf, 2-split.pdf
-     │  Step 2: extractions/step2_improved.py               OCR editor (Apple Vision, macOS only)
+ data/source/1-split.pdf, 2-split.pdf
+     │  Step 2: pipeline.ocr_editor.app                      OCR editor (Apple Vision, macOS only)
      ▼
- poem-extraction.csv  +  output-folder/<id>.png
+ data/ocr/entries-extracted.csv  +  data/images/<id>.png
      │  (both volumes merged by hand, "Quyển" column added)
      ▼
- filter/input.csv
-     │  Step 3: filter/review_app.py                        human review / cleanup UI
+ data/review/input.csv
+     │  Step 3: pipeline.review_app.app                      human review / cleanup UI
      ▼
- filter/filter-dataset.csv
-     │  Step 4: extractions/step3_metadata.py               OpenAI adds searchable_explanation + keywords
+ data/review/reviewed.csv
+     │  Step 4: pipeline.enrich_metadata                     OpenAI adds searchable_explanation + keywords
      ▼
- extractions/wiki.csv  ──────────────────────────────►  data/wiki.db (auto-built by the server)
-     │  Step 5: step2_index.py
+ data/wiki/wiki.csv  ──────────────────────────────►  data/wiki/wiki.db (auto-built by the server)
+     │  Step 5: pipeline.build_search_index
      ▼
- embeddings.pkl, keywords.pkl                         ──►  Search
+ data/indexes/embeddings.pkl, keywords.pkl            ──►  Search
 
- advice/advice.csv
-     │  Step 6: advice/advice_index.py
+ data/advice/advice.csv
+     │  Step 6: pipeline.build_advice_index
      ▼
- advice_index.pkl                                     ──►  Q&A
+ data/indexes/advice_index.pkl                        ──►  Q&A
 ```
-
-The step numbers in this README don't match the file names. `step1_extract.py` at the root is a legacy script, and the root `step2_index.py` is the real Step 5. See [What's legacy](#whats-legacy--safe-to-ignore).
 
 ### Step 1: Prepare the PDFs
 
 ```bash
-cd extractions
-python step1.py                                   # 2.pdf → 2-split.pdf (splits each 2-page spread into single pages)
-python cut.py <pdf> 1,2,51-53                     # remove covers/blank pages (1-based); writes <name>_cut.pdf
+pip install -r requirements-ocr.txt
+python -m pipeline.split_spreads                            # data/source/2.pdf → 2-split.pdf
+python -m tools.cut_pages data/source/<pdf> 1,2,51-53       # remove covers/blank pages (1-based); writes <name>_cut.pdf
 ```
 
-`step1.py` has its input (`2.pdf`) and output hard-coded at the bottom; edit the paths there to process volume 1. Install their dependencies with `pip install -r requirements-ocr.txt`.
+`split_spreads.py` has its input (`2.pdf`) and output hard-coded in `main()`; edit the file names there to process volume 1.
 
 ### Step 2: OCR the scans into CSV (macOS only)
 
 ```bash
-pip install -r requirements-ocr.txt
-cd extractions
-python step2_improved.py            # opens the OCR editor on http://127.0.0.1:5001
+python -m pipeline.ocr_editor.app   # opens the OCR editor on http://127.0.0.1:5001
 ```
 
-This is a web tool that uses Apple's Vision framework for Vietnamese OCR. You pick a `*-split.pdf`, adjust the boxes around each entry, and export. Exporting writes `poem-extraction.csv` and crops each entry into `output-folder/<id>.png`. Page edits are kept **in memory only**, so restarting the tool loses unsaved work.
-
-`extractions/step2.py` is the older non-interactive batch version (`2-split.pdf` → `2-extracted-poems.csv`). The root `apple_ocr.py` is a general-purpose OCR command-line tool (`python apple_ocr.py file.pdf -o out.txt`) and is not part of the pipeline.
+This is a web tool that uses Apple's Vision framework for Vietnamese OCR. You pick a PDF from `data/source/`, adjust the boxes around each entry, and export. Exporting writes `data/ocr/entries-extracted.csv` and crops each entry into `data/images/<id>.png`. Page edits are kept **in memory only**, so restarting the tool loses unsaved work.
 
 ### Step 3: Review and clean entries by hand
 
 ```bash
-python filter/review_app.py         # http://localhost:4005
+python -m pipeline.review_app.app   # http://localhost:4005
 ```
 
-Reads `filter/input.csv`, lets a reviewer step through and fix each entry, and writes `filter/filter-dataset.csv`. Progress is saved in `filter/review_state.json`, so you can stop and resume.
+Reads `data/review/input.csv`, lets a reviewer step through and fix each entry, and writes `data/review/reviewed.csv`. Progress is saved in `data/review/review_state.json`, so you can stop and resume.
 
 ### Step 4: Add LLM metadata (searchable explanation + keywords)
 
 Needs `CHATGPT_KEY` in `.env`. Uses `gpt-5-mini` for the text and `text-embedding-3-small` to merge near-duplicate keywords.
 
 ```bash
-cd extractions                      # must run here: it reads/writes keywords.json in the current dir
-python step3_metadata.py --input <your input>.csv --output wiki.csv --workers 20
+python -m pipeline.enrich_metadata --input data/review/reviewed.csv --output data/wiki/wiki.csv --workers 20
 ```
 
 - `--input` and `--output` are required. There are no defaults, so a careless re-run can't regenerate (and pay for) the whole dataset.
 - It is resumable: rows that already have both fields are skipped, and progress is saved periodically. To continue an interrupted run, point `--input` at the partial output file.
-- Keywords are restricted to the list in `keywords.json`. New keywords are only added when nothing in the list is ≥ 0.85 similar. Embeddings are cached in `.keywords_embeddings.json`.
+- Keywords are restricted to the list in `data/enrichment/keywords.json`. New keywords are only added when nothing in the list is ≥ 0.85 similar. Embeddings are cached in `data/enrichment/.keywords_embeddings.json`.
 - This step costs OpenAI money (~8,600 rows).
 
 ### Step 5: Build the search index
 
 ```bash
-# run from the repo root
-python step2_index.py
-python check.py                      # optional sanity check of the .pkl files
+python -m pipeline.build_search_index
+python -m tools.check_indexes        # optional sanity check
 ```
 
-Reads `extractions/wiki.csv` and writes `embeddings.pkl` and `keywords.pkl` to the **current directory**. The server reads them from the repo root, so run it from the root. Rows with no `searchable_explanation` or `keywords` are skipped. Each poem gets 3 vectors: poem text, meaning and keywords. Runs locally; there is no API cost.
+Reads `data/wiki/wiki.csv` and writes `embeddings.pkl` and `keywords.pkl` to `data/indexes/`. Rows with no `searchable_explanation` or `keywords` are skipped. Each entry gets 3 vectors: entry text, meaning and keywords. Runs locally; there is no API cost.
 
 After it finishes, restart the server.
 
 ### Step 6: Build the Q&A index
 
 ```bash
-python advice/advice_index.py       # reads advice/advice.csv, writes ./advice_index.pkl at the repo root
+python -m pipeline.build_advice_index   # reads data/advice/advice.csv, writes data/indexes/advice_index.pkl
 ```
 
 Restart the server afterwards.
 
-### Rebuilding `data/wiki.db`
+### Rebuilding `data/wiki/wiki.db`
 
-On startup the server imports `extractions/wiki.csv` into `data/wiki.db`, but only if the table is empty. If you change `wiki.csv`, delete `data/wiki.db` and restart the server to rebuild it. The database is committed to git, so commit the new one too.
+On startup the server imports `data/wiki/wiki.csv` into `data/wiki/wiki.db`, but only if the table is empty. If you change `wiki.csv`, delete `wiki.db` and restart the server to rebuild it. The database is committed to git, so commit the new one too.
 
 ---
 
 ## Learning data
 
-The Learning page reads a JSON list of `{topic, poems: [{poem_text, blanks: [{word, options}], introduction, interpretation}]}`.
+The Learning page reads a JSON list of `{topic, poems: [{poem_text, blanks: [{word, options}], introduction, interpretation}]}` from `data/learning/learning-data.json`.
 
 Two ways to edit it:
 
 ```bash
 # JSON <-> spreadsheet-friendly CSV
-python data/convert.py data/learning-data.json data/final.csv           # export
-python data/convert.py data/final.csv data/learning-data.json --reverse # import
+python -m tools.learning_data_csv data/learning/learning-data.json data/learning/learning-data.csv            # export
+python -m tools.learning_data_csv data/learning/learning-data.csv data/learning/learning-data.json --reverse  # import
 
-# JSON <-> plain text (scripts/learning_data_editor.txt)
-cd scripts
-python edit_learning_data.py --out    # JSON -> learning_data_editor.txt
-python edit_learning_data.py --in     # learning_data_editor.txt -> JSON
+# JSON <-> plain text (data/learning/learning-data.txt)
+python -m tools.learning_data_text --out    # JSON -> text
+python -m tools.learning_data_text --in     # text -> JSON
 ```
 
-User likes and dislikes are appended to `data/user_interpretations.txt` as `POEM_ID | USERNAME | STATUS | TEXT`. This file is tracked in git and holds real user input, so be careful about what you commit.
+The CSV and text files are editing intermediates and are gitignored; the JSON is the source of truth.
+
+User likes and dislikes are appended to `data/learning/user_interpretations.txt` as `POEM_ID | USERNAME | STATUS | TEXT`. This file is tracked in git and holds real user input, so be careful about what you commit.
 
 ---
 
@@ -256,71 +275,34 @@ User likes and dislikes are appended to `data/user_interpretations.txt` as `POEM
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `CA_DAO_VAN_DAP_KEY` | `step3_server.py` | OpenAI key for the Q&A page (model `gpt-5.1`). Without it, Q&A returns the top match's stock explanation and no generated advice. |
-| `CHATGPT_KEY` | `extractions/step3_metadata.py` | OpenAI key for Step 4 |
-| `APOLLO_API_KEY` | `step1_extract.py` (legacy) | Remote Ollama server; not needed |
+| `CA_DAO_VAN_DAP_KEY` | `app/server.py` | OpenAI key for the Q&A page (model `gpt-5.1`). Without it, Q&A returns the top match's stock explanation and no generated advice. |
+| `CHATGPT_KEY` | `pipeline/enrich_metadata.py` | OpenAI key for Step 4 |
 
-`.env.example` only lists `CHATGPT_KEY`; add the others yourself.
+`.env.example` only lists `CHATGPT_KEY`; add `CA_DAO_VAN_DAP_KEY` yourself.
 
 ---
 
-## How search works (`step3_server.py`)
+## How search works (`app/server.py`)
 
 1. Embed the query and search the multi-vector FAISS index (cosine ≥ 0.6).
-2. Find the closest keywords (≥ 0.6) and add every poem tagged with them.
+2. Find the closest keywords (≥ 0.6) and add every entry tagged with them.
 3. If there are still no results, relax the threshold to 0.25, then force-accept the top 3 keywords.
 4. As a last resort, do a plain substring search.
-5. Sort by score, apply the category filter, and look up each poem's `id` in `wiki.db`.
+5. Sort by score, apply the category filter, and look up each entry's `id` in `wiki.db`.
 
-Q&A works like this: embed the concern, take the max score per poem over its 3 vectors, keep the top 20, rerank them with the CrossEncoder, keep the top 3, then let OpenAI pick one and write the advice as JSON.
+Q&A works like this: embed the concern, take the max score per entry over its 3 vectors, keep the top 20, rerank them with the CrossEncoder, keep the top 3, then let OpenAI pick one and write the advice as JSON.
 
-The thresholds are constants at the top of `step3_server.py`.
-
----
-
-## Repo map
-
-```
-step3_server.py          ★ the web app (Flask). Everything the site does is here.
-step2_index.py           ★ Step 5: build embeddings.pkl / keywords.pkl
-advice/advice_index.py   ★ Step 6: build advice_index.pkl
-i18n.py                    UI strings (vi / en)
-templates/, static/        Frontend for the main site
-Makefile                   dev / prod / stop / status / logs
-check.py                   Sanity-check the .pkl files
-
-extractions/               Steps 1, 2 and 4 (PDF → CSV → enriched CSV), plus the OCR editor's own templates_editor/ and static/
-filter/                    Step 3 review app (own templates/ and static/)
-data/                      wiki.db, learning data, user interpretations, convert.py
-scripts/                   Learning-data text editor
-
-step1_extract.py           LEGACY: old Ollama/sailor2 meaning extractor
-filter.py                  LEGACY: one-off line-joining cleanup of an old input.csv
-apple_ocr.py               Standalone OCR command-line tool, not in the pipeline
-scratch/                   One-off debugging scripts
-OllamaServerUserGuide_*.html   Docs for the remote Ollama server used by the legacy script
-instruction.md, .agents/AGENTS.md   Rules for AI coding assistants
-```
-
-### What's legacy / safe to ignore
-
-- **`step1_extract.py`**: the first version of the enrichment step (Ollama `sailor2:20b` on a remote server, `input.csv` → `output.csv` with `Meaning`/`Keywords` columns). It was replaced by `extractions/step3_metadata.py`. Note that it calls `main()` at import time.
-- **`filter.py`**, **`extractions/step2.py`**, **`extractions/1-extracted-poems.csv`, `2-extracted-poems.csv`**: superseded by the OCR editor and the review app.
-- **`embedding.log`**, **`extractions/scratch/`**, **`.DS_Store`** files: leftover artifacts that were committed by accident.
+The thresholds are constants at the top of `app/server.py`.
 
 ---
 
 ## Gotchas
 
-1. **Run scripts from the right directory.** Paths are relative to the current working directory:
-   - `step2_index.py` and `check.py`: the repo root.
-   - `step3_metadata.py`: `extractions/`.
-   - `edit_learning_data.py`: `scripts/`.
-2. **The Makefile has two virtualenvs.** `make dev` and `make prod` use `./venv`, while `make dev-local` uses `./.venv`.
-3. **`/learning-page` and `/wiki-page` are not in the nav bar** (only Search and Q&A are). This looks intentional after the redesign in commit `38accc0`.
+1. **The Makefile has two virtualenvs.** `make dev` and `make prod` use `./venv`, while `make dev-local` uses `./.venv`.
+2. **`/learning-page` and `/wiki-page` are not in the nav bar** (only Search and Q&A are). This looks intentional after the redesign in commit `38accc0`.
 
 ---
 
 ## Notes for AI coding assistants
 
-See `.agents/AGENTS.md` and `instruction.md`. In short: the data files (`*.csv`, `*.pkl`) may not exist on the machine you are editing, so don't search for them or create mock data. Don't start the server or test the website unless you are explicitly asked to. Never read `.env`.
+See [`docs/guidelines/ai-assistants.md`](docs/guidelines/ai-assistants.md). In short: most of `data/` may not exist on the machine you are editing, so don't search for it or create mock data. Don't start the server or test the website unless you are explicitly asked to. Never read `.env`.

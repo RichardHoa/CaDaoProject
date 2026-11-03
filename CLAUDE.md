@@ -11,3 +11,7 @@ Default canonical labels (needs-triage, needs-info, ready-for-agent, ready-for-h
 ### Domain docs
 
 Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Guidelines
+
+Read `docs/guidelines/ai-assistants.md` before working in this repo: data is stored externally, don't run the app, never read `.env`.

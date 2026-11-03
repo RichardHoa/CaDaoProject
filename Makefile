@@ -13,31 +13,31 @@ LOG_FILE := $(PROJECT_DIR)/log.txt
 
 prod:
 	@echo "Starting server in production mode on port $(PORT)..."
-	@cd $(PROJECT_DIR) && PYTHONUNBUFFERED=1 nohup $(WAITRESS) --port=$(PORT) step3_server:app > $(LOG_FILE) 2>&1 &
+	@cd $(PROJECT_DIR) && PYTHONUNBUFFERED=1 nohup $(WAITRESS) --port=$(PORT) app.server:app > $(LOG_FILE) 2>&1 &
 	@echo "Server running in background from $(PROJECT_DIR)"
 	@echo "Logs: $(LOG_FILE)"
 
 dev:
 	@echo "Starting server in development mode from $(PROJECT_DIR)..."
-	@cd $(PROJECT_DIR) && $(PYTHON) $(PROJECT_DIR)/step3_server.py
+	@cd $(PROJECT_DIR) && $(PYTHON) -m app.server
 
 dev-local:
 	@echo "Starting server in local development mode from $(PROJECT_DIR)..."
-	@cd $(PROJECT_DIR) && $(DEV_PYTHON) $(PROJECT_DIR)/step3_server.py
+	@cd $(PROJECT_DIR) && $(DEV_PYTHON) -m app.server
 
 stop: down
 
 down:
 	@echo "Stopping running server instances..."
-	@-pkill -f "waitress-serve.*step3_server:app" || true
-	@-pkill -f "step3_server.py" || true
+	@-pkill -f "waitress-serve.*app.server:app" || true
+	@-pkill -f "app.server" || true
 	@echo "Server stopped."
 
 restart: down prod
 
 status:
 	@echo "Checking server status..."
-	@pgrep -a -f "step3_server" || echo "No server running."
+	@pgrep -a -f "app.server" || echo "No server running."
 
 logs:
 	@tail -f $(LOG_FILE)
