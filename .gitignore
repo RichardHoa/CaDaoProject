@@ -47,3 +47,4 @@ output-folder/
 
 
 *.json
+!data/learning-data.json

@@ -9,7 +9,7 @@ The site has these pages:
 | Search | `/` | Semantic and keyword search over all entries, with a category filter | `embeddings.pkl`, `keywords.pkl`, ML libraries |
 | Ca dao vấn đáp (Q&A) | `/qa-page` | The user describes a worry. The app finds the 3 best-matching sayings, reranks them, and asks OpenAI to pick one and write advice | `advice_index.pkl`, `CA_DAO_VAN_DAP_KEY`, ML libraries |
 | Wiki | `/wiki-page` | Browse every entry A–Z, with the cropped scan image of the original page | `data/wiki.db` (in git), `extractions/output-folder/*.png` |
-| Learning | `/learning-page` | A fill-in-the-blank game over curated poems, with likes/dislikes and user interpretations | `data/learning-data.json` |
+| Learning | `/learning-page` | A fill-in-the-blank game over curated poems, with likes/dislikes and user interpretations | `data/learning-data.json` (in git) |
 
 The nav bar only shows **Search** and **Q&A**. Wiki and Learning still work, but you reach them by typing the URL. The UI is in Vietnamese and English; the language is chosen by the `lang` cookie (strings are in `i18n.py`).
 
@@ -17,7 +17,7 @@ The nav bar only shows **Search** and **Q&A**. Wiki and Learning still work, but
 
 ## Quick start: run the website
 
-If someone has already given you the data files, this is all you need.
+This gets the server running. Search, Q&A and the Wiki scan images also need data files that aren't in git; see [Data you need](#data-you-need).
 
 ```bash
 python -m venv venv
@@ -47,20 +47,77 @@ On first start the server downloads two Hugging Face models: `AITeamVN/Vietnames
 
 ## Data you need
 
-Almost none of the data is in git. `.gitignore` excludes `*.csv`, `*.pkl`, `*.json`, `*.pdf` and `*.txt`, so a fresh clone has only the code, `data/wiki.db` and `data/user_interpretations.txt`. Get the rest from the team's shared storage and put it at these exact paths:
+The code is in git, but most of the data the site runs on is not: it is either too large or generated, and `.gitignore` excludes `*.csv`, `*.pkl`, `*.pdf` and most `*.json`/`*.txt` files. **You do not need to build any of it yourself.** The finished files already exist; you copy them from the team's shared storage into the right folders.
 
-| File | Size / rows | Used by | How it is made |
+### 1. What you already have after `git clone`
+
+| File | What it is |
+|---|---|
+| `data/wiki.db` | Every entry (8,651 rows) with its explanation. Powers the Wiki page and gives Search and Q&A their poem IDs. |
+| `data/learning-data.json` | The 33 curated poems for the Learning game. See [Learning data](#learning-data) to edit it. |
+| `data/user_interpretations.txt` | Likes/dislikes that visitors leave on the Learning page. |
+
+With only these, the **Wiki** (without scan images) and **Learning** pages work. Search shows "no data" and Q&A shows a random poem.
+
+### 2. What to ask the team for
+
+Pick the pages you want, then copy those files. Put them at **exactly** these paths, relative to the repo root:
+
+| You want… | Copy these files | Put them at |
+|---|---|---|
+| **Search** | `embeddings.pkl`, `keywords.pkl` | repo root |
+| **Q&A** | `advice_index.pkl` and `advice.csv` (plus `CA_DAO_VAN_DAP_KEY` in `.env`) | `advice_index.pkl` in the repo root, `advice.csv` in `advice/` |
+| **Scan images on the Wiki** | the `output-folder/` folder (~8,700 PNGs) | `extractions/output-folder/` |
+
+If you want everything, your folder should look like this:
+
+```
+CaDaoProject/
+├── embeddings.pkl              ← copied
+├── keywords.pkl                ← copied
+├── advice_index.pkl            ← copied
+├── advice/
+│   └── advice.csv              ← copied
+├── extractions/
+│   └── output-folder/          ← copied
+│       ├── <id>.png
+│       └── ...
+├── data/
+│   ├── wiki.db                 (from git)
+│   ├── learning-data.json      (from git)
+│   └── user_interpretations.txt (from git)
+└── step3_server.py
+```
+
+### 3. Check it worked
+
+Start the server (`make dev`) and read the startup log. It prints a line for each file it loads, such as `Loaded 687 advice entries`, and a `WARNING` line for each file it can't find. Fix the path of anything it warns about and restart.
+
+You can also run `python check.py` from the repo root to sanity-check the `.pkl` files.
+
+That's all a user of the site needs. The next section is only for people who want to regenerate the data.
+
+---
+
+## Rebuilding the data from scratch (most people can skip this)
+
+You only need this section if you are changing the dataset itself: fixing OCR errors, adding entries, changing the explanations, or re-tuning the search index. Everything in it has already been run once and its results are the files above.
+
+**Usually you only need Step 5 and/or Step 6**, after editing `wiki.csv` or `advice.csv`. Steps 1–4 mean redoing OCR and manual review of thousands of entries, and Step 4 costs OpenAI money.
+
+### Extra files the pipeline uses
+
+These are also in shared storage. Ask for the ones the step you are running reads.
+
+| File | Size / rows | Made by | Read by |
 |---|---|---|---|
-| `embeddings.pkl` (repo root) | ~8,200 poems × 3 vectors | Search | Step 5: `step2_index.py` |
-| `keywords.pkl` (repo root) | ~76 keywords | Search | Step 5: `step2_index.py` |
-| `advice_index.pkl` (repo root) | ~690 poems | Q&A | Step 6: `advice/advice_index.py` |
-| `advice/advice.csv` (or `./advice.csv`) | 687 rows | Q&A fallback only | Curated subset of `wiki.csv`; how it was made is not recorded in the repo |
-| `data/learning-data.json` | 33 poems | Learning page | Written by hand; edit it with the tools in [Learning data](#learning-data) |
-| `data/wiki.db` | 8,651 rows, **in git** | Wiki, plus poem IDs and explanations for Search and Q&A | Built automatically from `extractions/wiki.csv` |
-| `extractions/output-folder/<id>.png` | ~8,700 images | Wiki scan images | Step 2: OCR editor |
-| `extractions/wiki.csv` | 8,651 rows | Step 5; rebuilding `wiki.db` | Step 4 |
-
-You only need the first group (the `.pkl` files, `advice.csv` and `learning-data.json`) to *run* the site. The other files are only needed to *rebuild* the data.
+| `extractions/1.pdf`, `2.pdf` | 2 volumes | the original scanned dictionary | Step 1 |
+| `extractions/poem-extraction.csv` | | Step 2 | merged by hand into `filter/input.csv` |
+| `filter/input.csv` | | merged by hand | Step 3 |
+| `filter/filter-dataset.csv` | | Step 3 | Step 4 |
+| `extractions/keywords.json` | ~76 keywords | Step 4 (grows as it runs) | Step 4 |
+| `extractions/wiki.csv` | 8,651 rows | Step 4 | Step 5; rebuilding `wiki.db` |
+| `advice/advice.csv` | 687 rows | curated subset of `wiki.csv` (how it was made is not recorded) | Step 6 |
 
 ### Main CSV schemas
 
@@ -73,9 +130,7 @@ You only need the first group (the `.pkl` files, `advice.csv` and `learning-data
 - `advice/advice.csv`: `id, poem, category, searchable_explanation, keywords`
 - `filter/input.csv` → `filter/filter-dataset.csv`: `id, poem, category, explanation, Quyển[, keyword, type]`
 
----
-
-## The data pipeline
+### The pipeline
 
 ```
  1.pdf, 2.pdf  (scanned dictionary, 2 volumes)
@@ -103,8 +158,6 @@ You only need the first group (the `.pkl` files, `advice.csv` and `learning-data
      ▼
  advice_index.pkl                                     ──►  Q&A
 ```
-
-**Most of the time you only need Step 5 and/or Step 6**, after editing `wiki.csv` or `advice.csv`. Steps 1–4 have already been run and their outputs are in shared storage. Re-running them means redoing OCR and manual review of thousands of entries.
 
 The step numbers in this README don't match the file names. `step1_extract.py` at the root is a legacy script, and the root `step2_index.py` is the real Step 5. See [What's legacy](#whats-legacy--safe-to-ignore).
 
