@@ -37,6 +37,16 @@
         document.cookie = "lang=" + l + "; path=/; max-age=31536000;";
         window.location.reload();
       }
+      const categoryLabels = {
+        "(CA DAO)": i18n.cat_ca_dao,
+        "(THÀNH NGỮ)": i18n.cat_thanh_ngu,
+        "(TỤC NGỮ)": i18n.cat_tuc_ngu,
+        "(THÀNH NGỮ HÁN VIỆT)": i18n.cat_thanh_ngu_han_viet,
+        "(TỤC NGỮ HÁN VIỆT)": i18n.cat_tuc_ngu_han_viet,
+      };
+      function categoryLabel(category) {
+        return categoryLabels[(category || "").trim()] || category;
+      }
     </script>
 
     {% block head %}{% endblock %}
@@ -50,7 +60,7 @@
         <li><a href="/qa-page">{{ t.nav_qa }}</a></li>
         <li class="lang-dropdown-item">
           <div class="lang-dropdown">
-            <button class="lang-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="Select Language">
+            <button class="lang-dropdown-btn" aria-haspopup="true" aria-expanded="false" aria-label="{{ t.lang_select_aria }}">
               <span>{{ lang | upper }}</span>
               <svg class="chevron-down-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="6 9 12 15 18 9"></polyline>

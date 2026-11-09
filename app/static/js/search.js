@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             return `
                                 <div class="result-card">
                                     <div class="result-card-left">
-                                        <span class="category-badge badge-${badgeClass}">${escapeHtml(item.category)}</span>
+                                        <span class="category-badge badge-${badgeClass}">${escapeHtml(categoryLabel(item.category))}</span>
                                         <div class="poem">${formattedPoem}</div>
                                         <div class="meaning">${formattedMeaning}</div>
                                         ${item.keywords ? `<div class="keywords">${i18n.keyword_label}${escapeHtml(item.keywords)}</div>` : ''}
@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                             <div class="image-skeleton"></div>
                                             <img 
                                                 src="/wiki/image/${item.id}" 
-                                                alt="${escapeHtml(item.category)}" 
+                                                alt="${escapeHtml(categoryLabel(item.category))}" 
                                                 loading="lazy"
                                                 onload="this.classList.add('loaded'); this.previousElementSibling.style.display='none';"
                                                 onerror="this.style.display='none'; this.previousElementSibling.style.display='none';"

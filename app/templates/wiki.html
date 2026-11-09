@@ -24,11 +24,11 @@
         <div class="category-filter">
             <select id="wikiCategorySelect" aria-label="{{ t.wiki_category_all }}">
                 <option value="All">{{ t.wiki_category_all }}</option>
-                <option value="(CA DAO)">(CA DAO)</option>
-                <option value="(THÀNH NGỮ)">(THÀNH NGỮ)</option>
-                <option value="(TỤC NGỮ)">(TỤC NGỮ)</option>
-                <option value="(THÀNH NGỮ HÁN VIỆT)">(THÀNH NGỮ HÁN VIỆT)</option>
-                <option value="(TỤC NGỮ HÁN VIỆT)">(TỤC NGỮ HÁN VIỆT)</option>
+                <option value="(CA DAO)">{{ t.cat_ca_dao }}</option>
+                <option value="(THÀNH NGỮ)">{{ t.cat_thanh_ngu }}</option>
+                <option value="(TỤC NGỮ)">{{ t.cat_tuc_ngu }}</option>
+                <option value="(THÀNH NGỮ HÁN VIỆT)">{{ t.cat_thanh_ngu_han_viet }}</option>
+                <option value="(TỤC NGỮ HÁN VIỆT)">{{ t.cat_tuc_ngu_han_viet }}</option>
             </select>
         </div>
     </div>
@@ -63,12 +63,12 @@
 
     <!-- Lightbox Modal for enlarged scans -->
     <div id="wikiLightbox" class="wiki-lightbox hidden" role="dialog" aria-modal="true">
-        <button class="lightbox-close" id="lightboxClose" aria-label="Close image">×</button>
-        <img id="lightboxImg" class="lightbox-content" src="" alt="Enlarged scan">
+        <button class="lightbox-close" id="lightboxClose" aria-label="{{ t.close_image_aria }}">×</button>
+        <img id="lightboxImg" class="lightbox-content" src="" alt="{{ t.enlarged_scan_alt }}">
     </div>
 
     <!-- Back to Top Button -->
-    <button id="backToTopBtn" class="back-to-top hidden" aria-label="Back to top">↑</button>
+    <button id="backToTopBtn" class="back-to-top hidden" aria-label="{{ t.back_to_top_aria }}">↑</button>
 </section>
 {% endblock %}
 
@@ -244,7 +244,7 @@
             
             card.innerHTML = `
                 <div class="wiki-card-left">
-                    <div class="wiki-card-category-badge">${entry.category}</div>
+                    <div class="wiki-card-category-badge">${categoryLabel(entry.category)}</div>
                     <blockquote class="wiki-card-poem">${formattedPoem}</blockquote>
                     <div class="wiki-card-explanation">${formattedExplanation}</div>
                 </div>
@@ -253,7 +253,7 @@
                         <div class="image-skeleton"></div>
                         <img 
                             src="/wiki/image/${entry.id}" 
-                            alt="${entry.Alphabet} - ${entry.category}" 
+                            alt="${entry.Alphabet} - ${categoryLabel(entry.category)}" 
                             loading="lazy"
                             onload="this.classList.add('loaded'); this.previousElementSibling.style.display='none';"
                             onerror="this.src='/static/public/no_image.png'; this.previousElementSibling.style.display='none';"

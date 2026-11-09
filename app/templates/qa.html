@@ -6,22 +6,22 @@
 
 {% block content %}
 <section class="qa-section">
-    <h1 class="qa-header-title">Ca dao vấn đáp</h1>
+    <h1 class="qa-header-title">{{ t.qa_header }}</h1>
     
     <div class="qa-card-container">
-        <h2 class="qa-card-prompt">Hãy chia sẻ băn khoăn hoặc tâm sự của bạn tại đây</h2>
+        <h2 class="qa-card-prompt">{{ t.qa_prompt }}</h2>
         
         <div class="qa-input-wrapper">
             <textarea 
                 id="concernInput" 
-                placeholder="Tìm kiếm theo từ khoá..." 
+                placeholder="{{ t.qa_input_placeholder }}" 
                 rows="6"
                 aria-required="true"
             ></textarea>
         </div>
         
         <div class="qa-button-wrapper">
-            <button id="qaBtn" class="qa-submit-btn" aria-label="Xin lời khuyên">Xin lời khuyên</button>
+            <button id="qaBtn" class="qa-submit-btn" >{{ t.qa_submit }}</button>
         </div>
     </div>
 
